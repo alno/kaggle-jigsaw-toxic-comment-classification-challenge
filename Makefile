@@ -9,7 +9,8 @@ env:
 ## Download and extract data
 input:
 	mkdir input
-	cd input && kg download && ls | grep .zip | xargs -I{} unzip {}
+	cd input && test ! -e train.csv && kg download && ls | grep .csv.zip | xargs -I{} unzip {}
+	cd input && wget -O http://nlp.stanford.edu/data/glove.42B.300d.zip && unzip glove.42B.300d.zip
 
 
 
