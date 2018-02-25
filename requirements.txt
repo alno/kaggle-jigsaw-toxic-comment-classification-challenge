@@ -22,6 +22,7 @@ Wordbatch==1.3.0
 Cython==0.26.1
 psutil
 kaggle-cli
+git+git://github.com/hyperopt/hyperopt.git#egg=hyperopt
 
 # kgutil
 /home/alno/Projects/DataScience/kgutil

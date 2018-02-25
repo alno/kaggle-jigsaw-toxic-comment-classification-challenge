@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
 
-from copy import deepcopy
-
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import KFold
 
@@ -16,6 +14,7 @@ def main():
     parser.add_argument('preset')
 
     args = parser.parse_args()
+    preset = getattr(presets, args.preset)
 
     print("Loading data...")
     train = pd.read_csv('input/train.csv', index_col='id')
@@ -37,7 +36,7 @@ def main():
         fold_val_X = train_X.iloc[fold_val_idx]
         fold_val_y = train_y.iloc[fold_val_idx]
 
-        fold_model = deepcopy(getattr(presets, args.preset))
+        fold_model = preset()
 
         if hasattr(fold_model, 'fit_eval'):
             fold_model.fit_eval(fold_train_X, fold_train_y, fold_val_X, fold_val_y)
