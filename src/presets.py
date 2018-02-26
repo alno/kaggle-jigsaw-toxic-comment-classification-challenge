@@ -61,19 +61,22 @@ def rnn_pretrained():
 
 
 @hp_search_space(
-    text_emb_dropout=hp.uniform('text_emb_dropout', 0.0, 0.7),
-    rnn_layer_size=hp.quniform('rnn_layer_size', 16, 128, 16),
-    mlp_layer_size=hp.quniform('mlp_layer_size', 16, 128, 16),
-    mlp_dropout=hp.uniform('mlp_dropout', 0.0, 0.7),
+    text_emb_dropout=hp.uniform('text_emb_dropout', 0.1, 0.6),
+    rnn_layer_size=hp.quniform('rnn_layer_size', 16, 64, 16),
+    rnn_bidi=hp.choice('rnn_bidi', [True, False]),
+    rnn_pooling=hp.choice('rnn_pooling', [None, 'avg', 'max', 'avgmax']),
+    mlp_layer_size=hp.quniform('mlp_layer_size', 32, 128, 32),
+    mlp_layer_num=hp.quniform('mlp_layer_num', 1, 2, 1),
+    mlp_dropout=hp.uniform('mlp_dropout', 0.1, 0.6),
 )
-def rnn_pretrained_2(text_emb_dropout=0.2, rnn_layer_size=32, mlp_layer_size=64, mlp_dropout=0.3):
+def rnn_pretrained_2(text_emb_dropout=0.2, rnn_layer_size=32, rnn_bidi=True, rnn_pooling='avgmax', mlp_layer_size=64, mlp_layer_num=1, mlp_dropout=0.3):
     return KerasRNN(
-        num_epochs=5, batch_size=200, external_metrics=dict(roc_auc=roc_auc_score),
+        num_epochs=10, batch_size=200, external_metrics=dict(roc_auc=roc_auc_score),
         compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
         model_opts=dict(
             out_activation='sigmoid',
             text_emb_size=300, text_emb_file='input/glove.42B.300d.txt', text_emb_trainable=False, text_emb_dropout=text_emb_dropout,
-            rnn_layers=[int(rnn_layer_size)], rnn_bidi=True, rnn_pooling='avgmax',
-            mlp_dropout=mlp_dropout, mlp_layers=[int(mlp_layer_size)]
+            rnn_layers=[int(rnn_layer_size)], rnn_bidi=rnn_bidi, rnn_pooling=rnn_pooling,
+            mlp_dropout=mlp_dropout, mlp_layers=[int(mlp_layer_size)] * int(mlp_layer_num)
         )
     )
