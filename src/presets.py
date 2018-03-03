@@ -94,3 +94,16 @@ def rnn_pretrained_2(text_emb_dropout=0.2, rnn_layer_size=32, rnn_bidi=True, rnn
             mlp_dropout=mlp_dropout, mlp_layers=[int(mlp_layer_size)] * int(mlp_layer_num)
         )
     )
+
+
+def rnn_pretrained_3(text_emb_dropout=0.29, rnn_layer_size=32, rnn_bidi=True, rnn_pooling='avgmax', mlp_layer_size=96, mlp_layer_num=1, mlp_dropout=0.16):
+    return KerasRNN(
+        num_epochs=10, batch_size=500, external_metrics=dict(roc_auc=roc_auc_score),
+        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
+        model_opts=dict(
+            out_activation='sigmoid',
+            text_emb_size=300, text_emb_file=input_file('glove.42B.300d.txt'), text_emb_trainable=False, text_emb_dropout=text_emb_dropout,
+            rnn_layers=[int(rnn_layer_size)], rnn_bidi=rnn_bidi, rnn_pooling=rnn_pooling,
+            mlp_dropout=mlp_dropout, mlp_layers=[int(mlp_layer_size)] * int(mlp_layer_num)
+        )
+    )
