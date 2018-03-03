@@ -38,8 +38,8 @@ def basic_lr():
     )
 
 
-@features('clean1')
-def mini_rnn():
+@features('clean1', 'num1')
+def test_rnn():
     return KerasRNN(
         num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
         compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
@@ -140,5 +140,20 @@ def cudnn_lstm_2():
             lr=1e-3,
             rnn_layers=[64, 64], rnn_dropout=0.15,
             text_emb_size=200, text_emb_file=input_file('glove.twitter.27B.200d.txt'), text_emb_dropout=0.25
+        )
+    )
+
+
+@features('clean1', 'num1')
+def rnn_pretrained_4(text_emb_dropout=0.3, rnn_layer_size=32, rnn_layer_num=2, rnn_bidi=True, rnn_pooling='avgmax', mlp_layer_size=96, mlp_layer_num=1, mlp_dropout=0.15):
+    return KerasRNN(
+        num_epochs=20, batch_size=500, external_metrics=dict(roc_auc=roc_auc_score),
+        early_stopping_opts=dict(patience=3),
+        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
+        model_opts=dict(
+            out_activation='sigmoid',
+            text_emb_size=200, text_emb_file=input_file('glove.twitter.27B.200d.txt'), text_emb_trainable=False, text_emb_dropout=text_emb_dropout,
+            rnn_layers=[int(rnn_layer_size)] * int(rnn_layer_num), rnn_bidi=rnn_bidi, rnn_pooling=rnn_pooling,
+            mlp_dropout=mlp_dropout, mlp_layers=[int(mlp_layer_size)] * int(mlp_layer_num)
         )
     )

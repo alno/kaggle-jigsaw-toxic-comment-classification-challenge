@@ -1,4 +1,5 @@
 import re
+import pandas as pd
 
 
 def clean1(raw):
@@ -14,3 +15,18 @@ def clean1(raw):
         return line.strip()
 
     return raw.applymap(clean)
+
+
+def num1(raw):
+    def cap_ratio(line):
+        line = re.sub('\W', '', line)
+        return len(re.sub('[^A-Z]', '', line)) / (len(line) + 1.0)
+
+    def exq_ratio(line):
+        line = re.sub('[^\w!?]', '', line)
+        return len(re.sub('[^!?]', '', line)) / (len(line) + 1.0)
+
+    df = pd.DataFrame(index=raw.index)
+    df['cap_ratio'] = raw['comment_text'].map(cap_ratio)
+    df['exq_ratio'] = raw['comment_text'].map(exq_ratio)
+    return df
