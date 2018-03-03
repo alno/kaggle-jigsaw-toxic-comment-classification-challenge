@@ -21,8 +21,8 @@ def load_emb_matrix(filename, word_index, voc_size, emb_size, rand_std=None):
 def cudnn_lstm_1(
     data, target_shape,
     lr=0.0003,
-    mlp_dropout=0.3,
     rnn_dropout=None, rnn_layers=[50],
+    mlp_layers=[70], mlp_dropout=0.3,
     text_emb_dropout=0.2, text_emb_size=32, text_emb_file=None, text_emb_trainable=True
 ):
     from keras.models import Sequential
@@ -45,8 +45,9 @@ def cudnn_lstm_1(
             model.add(SpatialDropout1D(rnn_dropout))
 
     model.add(GlobalMaxPool1D())
-    model.add(Dense(70, activation="relu"))
-    model.add(Dropout(mlp_dropout))
+    for layer_size in mlp_layers:
+        model.add(Dense(layer_size, activation="relu"))
+        model.add(Dropout(mlp_dropout))
     model.add(Dense(6, activation="sigmoid"))
     model.compile(loss='binary_crossentropy', optimizer=Adam(lr=lr, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.000015))
     return model

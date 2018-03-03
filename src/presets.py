@@ -1,12 +1,12 @@
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import FunctionTransformer
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import make_pipeline, make_union
 from sklearn.metrics import roc_auc_score
 
 from scipy.special import expit
 
-from src.util.estimators import MultiProba
+from src.util.estimators import MultiProba, SimpleAverage, WeightedAverage, OnExtendedData
 from src.util.preprocessors import OnColumn, DropColumns
 from src.meta import input_file
 
@@ -48,6 +48,29 @@ def basic_lr():
     )
 
 
+def lr2():
+    return make_pipeline(
+        OnColumn('comment_text', make_union(
+            TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='word',
+                token_pattern=r'\w{1,}',
+                stop_words='english',
+                ngram_range=(1, 1),
+                max_features=10000),
+            TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='char',
+                stop_words='english',
+                ngram_range=(2, 6),
+                max_features=50000)
+        )),
+        MultiProba(LogisticRegression())
+    )
+
+
 @features('clean1', 'num1')
 def test_rnn():
     return KerasRNN(
@@ -60,6 +83,20 @@ def test_rnn():
             mlp_layers=[]
         )
     )
+
+
+@features('clean1')
+def test_rnn_ext():
+    return OnExtendedData(KerasRNN(
+        num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
+        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
+        model_opts=dict(
+            out_activation='sigmoid',
+            text_emb_size=8,
+            rnn_layers=[8],
+            mlp_layers=[]
+        )
+    ))
 
 
 @param_search_space(
@@ -185,16 +222,37 @@ def rnn_pretrained_5(text_emb_dropout=0.3, rnn_layer_size=48, rnn_layer_num=2, r
     )
 
 
-class SimpleAverage:
+def cudnn_lstm_2_ext():
+    return OnExtendedData(max_len=70, decay=0.7, model=KerasRNN(
+        num_epochs=30, batch_size=800, external_metrics=dict(roc_auc=roc_auc_score),
+        early_stopping_opts=dict(patience=3),
+        compile_opts=None,
+        model_fn=keras_models.cudnn_lstm_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_layers=[64, 64], rnn_dropout=0.15,
+            text_emb_size=200, text_emb_file=input_file('glove.twitter.27B.200d.txt'), text_emb_dropout=0.25
+        )
+    ))
 
-    def fit(self, X, y):
-        print(X.columns)
-        assert X.shape[1] % 6 == 0
-        self.n_groups = X.shape[1] // 6
-        return self
 
-    def predict(self, X):
-        return sum(X.iloc[:, i*6:i*6 + 6].values for i in range(self.n_groups)) / self.n_groups
+def cudnn_lstm_3_ext():
+    return OnExtendedData(max_len=70, decay=0.7, n_samples=80000, model=KerasRNN(
+        num_epochs=30, batch_size=1000, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post',
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.cudnn_lstm_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_layers=[64, 64], rnn_dropout=0.15,
+            mlp_layers=[96], mlp_dropout=0.3,
+            text_emb_size=200, text_emb_file=input_file('glove.twitter.27B.200d.txt'), text_emb_dropout=0.25
+        )
+    ))
+
+
+# L2
 
 
 @submodels('cudnn_lstm_2', 'rnn_pretrained_3')
@@ -211,4 +269,28 @@ def l2_avg():
     return make_pipeline(
         DropColumns(['comment_text']),
         SimpleAverage(),
+    )
+
+
+@submodels('cudnn_lstm_2', 'rnn_pretrained_4')
+def l2_avg2():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )
+
+
+@submodels('cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4')
+def l2_wavg1():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        WeightedAverage([0.4, 0.2, 0.4]),
+    )
+
+
+@submodels('lr2', 'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4')
+def l2_wavg2():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        WeightedAverage([0.15, 0.35, 0.1, 0.4]),
     )

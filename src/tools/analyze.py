@@ -10,7 +10,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('preset')
-    parser.add_argument('--fold', type=int)
+    parser.add_argument('--fold', type=int, default=0)
 
     args = parser.parse_args()
 
