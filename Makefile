@@ -3,7 +3,7 @@ default: help
 ## Setup environment
 env:
 	virtualenv -p python3 .venv
-	bash -c "source .venv/bin/activate && pip install Cython==0.26.1 && pip install -r requirements.txt"
+	bash -c "source .venv/bin/activate && pip install Cython==0.26.1 && pip install -r requirements-cpu.txt"
 
 
 ## Download and extract data
