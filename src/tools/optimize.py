@@ -7,10 +7,14 @@ from hyperopt.base import JOB_STATE_DONE, STATUS_OK
 from hyperopt.utils import coarse_utcnow
 
 import src.presets as presets
+import src.util.meta as meta
 
 import argparse
 import json
 import os
+
+
+cv = KFold(3, shuffle=True, random_state=123)
 
 
 def add_trial_from_json(trials, result):
@@ -71,19 +75,13 @@ def main():
     args = parser.parse_args()
     preset = getattr(presets, args.preset)
 
-    print("Loading data...")
-    train = pd.read_csv('input/train.csv', index_col='id')
-
-    train_X = train[['comment_text']]
-    train_y = train[['toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate']]
-
-    cv = KFold(3, shuffle=True, random_state=123)
+    train_X, train_y, _ = meta.read_input_data()
 
     # Describe experiment
     def experiment(params):
         print("Running experiment for params {}".format(params))
         histories = []
-        for fold, (fold_train_idx, fold_val_idx) in enumerate(cv.split(range(train.shape[0]))):
+        for fold, (fold_train_idx, fold_val_idx) in enumerate(cv.split(range(train_X.shape[0]))):
             print("Fold {}:".format(fold))
             model = preset(**params)
             histories.append(model.fit_eval(train_X.iloc[fold_train_idx], train_y.iloc[fold_train_idx], train_X.iloc[fold_val_idx], train_y.iloc[fold_val_idx]))
