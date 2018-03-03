@@ -2,6 +2,8 @@ import os
 import inspect
 import pandas as pd
 
+from sklearn.model_selection import KFold
+
 from src import features
 
 
@@ -10,6 +12,9 @@ cache_dir = os.getenv('CACHE_DIR', 'cache')
 
 input_columns = ['comment_text']
 target_columns = ['toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate']
+
+
+cv = KFold(10, shuffle=True, random_state=43)
 
 
 def input_file(filename):
@@ -60,3 +65,7 @@ def get_feature(name, loaded={}):
     res.to_pickle(cache_file_path)
     loaded[name] = res
     return res
+
+
+def get_model_prediction(preset, fold, part):
+    return pd.read_pickle(os.path.join(cache_dir, preset, 'fold-%d' % fold, 'pred-%s.pickle' % part))
