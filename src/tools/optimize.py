@@ -6,8 +6,7 @@ from hyperopt import fmin, tpe, Trials
 from hyperopt.base import JOB_STATE_DONE, STATUS_OK
 from hyperopt.utils import coarse_utcnow
 
-import src.presets as presets
-import src.util.meta as meta
+from src import meta, presets
 
 import argparse
 import json
@@ -75,7 +74,7 @@ def main():
     args = parser.parse_args()
     preset = getattr(presets, args.preset)
 
-    train_X, train_y, _ = meta.read_input_data()
+    train_X, train_y, _ = meta.get_input_data(preset)
 
     # Describe experiment
     def experiment(params):
@@ -94,7 +93,7 @@ def main():
         return dict(status=STATUS_OK, loss=-best_auc, scores=list(mean_history['roc_auc']), params=params)
 
     # Run optimization
-    best = optimize(experiment, preset.hp_search_space, report='hp-report-{}.json'.format(args.preset))
+    best = optimize(experiment, preset.param_search_space, report='hp-report-{}.json'.format(args.preset))
 
     print("Done, best: {}".format(best))
 

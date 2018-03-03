@@ -5,7 +5,7 @@ from sklearn.metrics import roc_auc_score
 
 from src.util.estimators import MultiProba
 from src.util.preprocessors import OnColumn
-from src.util.meta import input_file
+from src.meta import input_file
 
 import src.models.keras as keras_models
 
@@ -14,9 +14,16 @@ from kgutil.models.keras import KerasRNN
 from hyperopt import hp
 
 
-def hp_search_space(**space):
+def param_search_space(**space):
     def decorator(fn):
-        fn.hp_search_space = space
+        fn.param_search_space = space
+        return fn
+    return decorator
+
+
+def features(*features):
+    def decorator(fn):
+        fn.features = features
         return fn
     return decorator
 
@@ -31,6 +38,7 @@ def basic_lr():
     )
 
 
+@features('clean1')
 def mini_rnn():
     return KerasRNN(
         num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
@@ -44,7 +52,7 @@ def mini_rnn():
     )
 
 
-@hp_search_space(
+@param_search_space(
     text_emb_size=hp.quniform('text_emb_size', 8, 32, 4),
     rnn_layer_size=hp.quniform('rnn_layer_size', 4, 16, 4),
     mlp_layer_size=hp.quniform('mlp_layer_size', 4, 16, 4),
@@ -76,7 +84,7 @@ def rnn_pretrained():
     )
 
 
-@hp_search_space(
+@param_search_space(
     text_emb_dropout=hp.uniform('text_emb_dropout', 0.1, 0.6),
     rnn_layer_size=hp.quniform('rnn_layer_size', 16, 64, 16),
     rnn_bidi=hp.choice('rnn_bidi', [True, False]),

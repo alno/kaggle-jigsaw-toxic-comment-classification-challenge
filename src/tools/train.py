@@ -4,8 +4,7 @@ import numpy as np
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import KFold
 
-import src.presets as presets
-import src.util.meta as meta
+from src import meta, presets
 
 import os
 import shutil
@@ -40,7 +39,7 @@ def main():
     preset = getattr(presets, preset_name)
     preset_dir = os.path.join(meta.cache_dir, preset_name)
 
-    train_X, train_y, test_X = meta.read_input_data()
+    train_X, train_y, test_X = meta.get_input_data(preset)
 
     scores = pd.DataFrame(data=np.nan, columns=train_y.columns, index=range(cv.n_splits))
 

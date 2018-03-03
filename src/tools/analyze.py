@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-import src.util.meta as meta
+from src import meta
 
 import os
 import argparse
