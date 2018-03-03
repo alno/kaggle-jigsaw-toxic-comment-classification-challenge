@@ -11,7 +11,7 @@ input:
 	mkdir input
 	cd input && kg download && ls | grep .csv.zip | xargs -I{} unzip {}
 	cd input && wget http://nlp.stanford.edu/data/glove.42B.300d.zip && unzip glove.42B.300d.zip
-
+	cd input && wget http://nlp.stanford.edu/data/glove.twitter.27B.zip && unzip glove.twitter.27B.zip
 
 
 # Inspired by <http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html>

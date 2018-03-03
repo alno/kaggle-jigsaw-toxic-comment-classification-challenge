@@ -17,8 +17,8 @@ cv = KFold(10, shuffle=True, random_state=43)
 class FoldCache:
     def __init__(self, directory):
         self.directory = directory
-        self.val_preds_file = os.path.join(directory, 'pred-val.csv')
-        self.test_preds_file = os.path.join(directory, 'pred-test.csv')
+        self.val_preds_file = os.path.join(directory, 'pred-val.pickle')
+        self.test_preds_file = os.path.join(directory, 'pred-test.pickle')
 
     def exists(self):
         return all(map(os.path.exists, [self.val_preds_file, self.test_preds_file]))
@@ -59,8 +59,8 @@ def main():
             print("Fold already fitted, skipping...")
 
             # Load predictions
-            fold_val_p = pd.read_csv(fold_cache.val_preds_file, index_col='id')
-            fold_test_p = pd.read_csv(fold_cache.test_preds_file, index_col='id')
+            fold_val_p = pd.read_pickle(fold_cache.val_preds_file)
+            fold_test_p = pd.read_pickle(fold_cache.test_preds_file)
         else:
             fold_cache.recreate()
             fold_model = preset()
@@ -73,10 +73,10 @@ def main():
 
             # Make and save predictions
             fold_val_p = pd.DataFrame(fold_model.predict(fold_val_X), columns=meta.target_columns, index=fold_val_X.index)
-            fold_val_p.to_csv(fold_cache.val_preds_file)
+            fold_val_p.to_pickle(fold_cache.val_preds_file)
 
             fold_test_p = pd.DataFrame(fold_model.predict(test_X), columns=meta.target_columns, index=test_X.index)
-            fold_test_p.to_csv(fold_cache.test_preds_file)
+            fold_test_p.to_pickle(fold_cache.test_preds_file)
 
         scores.loc[fold] = roc_auc_score(fold_val_y, fold_val_p, average=None)
 
