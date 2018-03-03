@@ -1,10 +1,13 @@
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import FunctionTransformer
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import roc_auc_score
 
+from scipy.special import expit
+
 from src.util.estimators import MultiProba
-from src.util.preprocessors import OnColumn
+from src.util.preprocessors import OnColumn, DropColumns
 from src.meta import input_file
 
 import src.models.keras as keras_models
@@ -24,6 +27,13 @@ def param_search_space(**space):
 def features(*features):
     def decorator(fn):
         fn.features = features
+        return fn
+    return decorator
+
+
+def submodels(*submodels):
+    def decorator(fn):
+        fn.submodels = submodels
         return fn
     return decorator
 
@@ -172,4 +182,33 @@ def rnn_pretrained_5(text_emb_dropout=0.3, rnn_layer_size=48, rnn_layer_num=2, r
             rnn_layers=[int(rnn_layer_size)] * int(rnn_layer_num), rnn_bidi=rnn_bidi, rnn_pooling=rnn_pooling, rnn_cell='gru', rnn_dropout=rnn_dropout, rnn_cudnn=True,
             mlp_dropout=mlp_dropout, mlp_layers=[int(mlp_layer_size)] * int(mlp_layer_num)
         )
+    )
+
+
+class SimpleAverage:
+
+    def fit(self, X, y):
+        print(X.columns)
+        assert X.shape[1] % 6 == 0
+        self.n_groups = X.shape[1] // 6
+        return self
+
+    def predict(self, X):
+        return sum(X.iloc[:, i*6:i*6 + 6].values for i in range(self.n_groups)) / self.n_groups
+
+
+@submodels('cudnn_lstm_2', 'rnn_pretrained_3')
+def l2_lr():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        FunctionTransformer(expit),
+        MultiProba(LogisticRegression())
+    )
+
+
+@submodels('cudnn_lstm_2', 'rnn_pretrained_3')
+def l2_avg():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
     )

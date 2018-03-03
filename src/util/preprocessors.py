@@ -16,3 +16,18 @@ class OnColumn(BaseEstimator):
 
     def transform(self, X):
         return self.transformer.transform(X[self.column])
+
+
+class DropColumns(BaseEstimator):
+
+    def __init__(self, columns):
+        self.columns = columns
+
+    def fit(self, X, y=None):
+        return self
+
+    def fit_transform(self, X, y=None):
+        return self.transform(X)
+
+    def transform(self, X):
+        return X.drop(self.columns, axis=1)
