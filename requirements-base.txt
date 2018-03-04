@@ -22,6 +22,7 @@ Cython==0.26.1
 psutil
 kaggle-cli
 fabric3
+tqdm
 git+git://github.com/hyperopt/hyperopt.git#egg=hyperopt
 
 # kgutil

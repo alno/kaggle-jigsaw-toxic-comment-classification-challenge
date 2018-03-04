@@ -11,6 +11,7 @@ from src.util.preprocessors import OnColumn, DropColumns
 from src.meta import input_file
 
 import src.models.keras as keras_models
+import src.models.tensorflow as tf_models
 
 from kgutil.models.keras import KerasRNN
 
@@ -38,7 +39,44 @@ def submodels(*submodels):
     return decorator
 
 
-## Presets
+## Test models
+
+@features('clean1')
+def test_rnn():
+    return KerasRNN(
+        num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
+        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
+        model_opts=dict(
+            out_activation='sigmoid',
+            text_emb_size=8,
+            rnn_layers=[8],
+            mlp_layers=[]
+        )
+    )
+
+
+@features('clean1')
+def test_rnn_ext():
+    return OnExtendedData(KerasRNN(
+        num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
+        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
+        model_opts=dict(
+            out_activation='sigmoid',
+            text_emb_size=8,
+            rnn_layers=[8],
+            mlp_layers=[]
+        )
+    ))
+
+
+@features('clean1')
+def test_tf():
+    return tf_models.TfModel(
+        num_epochs=1, batch_size=3000,
+        model_opts=dict(emb_size=8, rnn_size=8)
+    )
+
+## L1 models
 
 
 def basic_lr():
@@ -94,34 +132,6 @@ def lr3():
         ),
         MultiProba(LogisticRegression())
     )
-
-
-@features('clean2_corrected_fasttext', 'num1')
-def test_rnn():
-    return KerasRNN(
-        num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
-        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
-        model_opts=dict(
-            out_activation='sigmoid',
-            text_emb_size=8,
-            rnn_layers=[8],
-            mlp_layers=[]
-        )
-    )
-
-
-@features('clean1')
-def test_rnn_ext():
-    return OnExtendedData(KerasRNN(
-        num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
-        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
-        model_opts=dict(
-            out_activation='sigmoid',
-            text_emb_size=8,
-            rnn_layers=[8],
-            mlp_layers=[]
-        )
-    ))
 
 
 @param_search_space(
@@ -309,6 +319,57 @@ def bigru_gmp_2():
         )
     )
 
+
+@features('clean2_corrected_fasttext')
+def bigru_sterby_2():
+    return KerasRNN(
+        num_epochs=50, batch_size=1000, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.4,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5
+        )
+    )
+
+
+@features('clean2_corrected_fasttext', 'num1')
+def bigru_sterby_2_num():
+    return KerasRNN(
+        num_epochs=50, batch_size=1000, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.35,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5
+        )
+    )
+
+
+@features('clean2_corrected_fasttext')
+def bigru_sterby_2_ext():
+    return OnExtendedData(max_len=70, decay=0.8, n_samples=40000, model=KerasRNN(
+        num_epochs=50, batch_size=1000, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.4,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5
+        )
+    ))
+
 # L2
 
 
@@ -358,4 +419,28 @@ def l2_wavg3():
     return make_pipeline(
         DropColumns(['comment_text']),
         WeightedAverage([0.05, 0.1, 0.35, 0.1, 0.4]),
+    )
+
+
+@submodels('lr2', 'lr3', 'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1')
+def l2_wavg4():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        WeightedAverage([0.05, 0.1, 0.3, 0.1, 0.4, 0.4], renorm=True),
+    )
+
+
+@submodels('lr2', 'lr3', 'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1')
+def l2_avg3():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )
+
+
+@submodels('lr2', 'lr3', 'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2')
+def l2_avg4():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
     )

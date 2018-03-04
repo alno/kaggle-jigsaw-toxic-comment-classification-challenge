@@ -65,9 +65,11 @@ def bigru_1(
     else:
         emb_weights = None
 
-    inp = Input(shape=[data.max_text_len], name='comment_text')
+    text_inp = Input(shape=[data.max_text_len], name='comment_text')
 
-    emb = Embedding(data.text_voc_size, text_emb_size, weights=emb_weights, trainable=text_emb_trainable)(inp)
+    inputs = [text_inp]
+
+    emb = Embedding(data.text_voc_size, text_emb_size, weights=emb_weights, trainable=text_emb_trainable)(text_inp)
     emb = SpatialDropout1D(text_emb_dropout)(emb)
 
     rnn_seq, rnn_fwd_out, rnn_rev_out = Bidirectional(CuDNNGRU(rnn_size, return_sequences=True, return_state=True))(emb)
@@ -81,10 +83,15 @@ def bigru_1(
     else:
         raise RuntimeError("Unknown pooling: %r" % rnn_pooling)
 
+    if len(data.numeric_columns) > 0:
+        num_inp = Input(shape=[len(data.numeric_columns)], name="numeric_columns__")
+        inputs.append(num_inp)
+        out = concatenate([out, num_inp])
+
     out = Dropout(out_dropout)(out)
     out = Dense(6, activation='sigmoid')(out)
 
     # Model
-    model = Model(inp, out)
+    model = Model(inputs, out)
     model.compile(loss='binary_crossentropy', optimizer=Adam(lr=lr, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.000015))
     return model

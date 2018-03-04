@@ -29,8 +29,8 @@ class SimpleAverage:
 
 class WeightedAverage:
 
-    def __init__(self, weights):
-        self.weights = weights
+    def __init__(self, weights, renorm=False):
+        self.weights = np.asarray(weights) / sum(weights) if renorm else weights
 
     def fit(self, X, y):
         assert X.shape[1] == len(self.weights) * 6

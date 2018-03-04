@@ -32,6 +32,8 @@ class FoldCache:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('preset')
+    parser.add_argument('--fold', type=int)
+    parser.add_argument('--force', action='store_true')
 
     args = parser.parse_args()
 
@@ -54,6 +56,9 @@ def main():
     scores = pd.DataFrame(data=np.nan, columns=meta.target_columns, index=range(meta.cv.n_splits))
 
     for fold, (fold_train_idx, fold_val_idx) in enumerate(meta.cv.split(range(train_X.shape[0]))):
+        if args.fold is not None and args.fold != fold:
+            continue
+
         print()
         print("Fold {}:".format(fold))
 
@@ -66,7 +71,7 @@ def main():
         fold_test_X = test_X
 
         fold_cache = FoldCache(os.path.join(preset_dir, 'fold-%d' % fold))
-        if fold_cache.exists():
+        if fold_cache.exists() and not args.force:
             print("Fold already fitted, skipping...")
 
             # Load predictions
