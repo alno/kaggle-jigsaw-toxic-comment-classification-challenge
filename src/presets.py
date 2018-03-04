@@ -72,6 +72,31 @@ def lr2():
 
 
 @features('clean1', 'num1')
+def lr3():
+    return make_pipeline(
+        make_union(
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='word',
+                token_pattern=r'\w{1,}',
+                stop_words='english',
+                ngram_range=(1, 1),
+                max_features=10000)),
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='char',
+                stop_words='english',
+                ngram_range=(2, 6),
+                max_features=50000)),
+            DropColumns(['comment_text']),
+        ),
+        MultiProba(LogisticRegression())
+    )
+
+
+@features('clean2_corrected_fasttext', 'num1')
 def test_rnn():
     return KerasRNN(
         num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
@@ -252,6 +277,38 @@ def cudnn_lstm_3_ext():
     ))
 
 
+def bigru_gmp_1():
+    return KerasRNN(
+        num_epochs=50, batch_size=800, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='gmp',
+            out_dropout=0.3,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.4
+        )
+    )
+
+
+@features('clean2_corrected_fasttext')
+def bigru_gmp_2():
+    return KerasRNN(
+        num_epochs=50, batch_size=1000, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='gmp',
+            out_dropout=0.3,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5
+        )
+    )
+
 # L2
 
 
@@ -293,4 +350,12 @@ def l2_wavg2():
     return make_pipeline(
         DropColumns(['comment_text']),
         WeightedAverage([0.15, 0.35, 0.1, 0.4]),
+    )
+
+
+@submodels('lr2', 'lr3', 'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4')
+def l2_wavg3():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        WeightedAverage([0.05, 0.1, 0.35, 0.1, 0.4]),
     )

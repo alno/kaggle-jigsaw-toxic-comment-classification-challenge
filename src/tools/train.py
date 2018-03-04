@@ -110,8 +110,14 @@ def main():
     scores['AVG'] = scores.mean(axis=1)
 
     with pd.option_context('display.width', 160):
-        print("\nSCORES:\n\n%r" % scores.rename(index=lambda i: "  %d" % i))
-        print("\n%r\n" % pd.DataFrame({'AVG': scores.mean(axis=0), 'STD': scores.std(axis=0)}).T)
+        report = (
+            scores.rename(index=lambda i: "  %d" % i),
+            pd.DataFrame({'AVG': scores.mean(axis=0), 'STD': scores.std(axis=0)}).T
+        )
+
+        print("\nSCORES:\n\n%r\n\n%r\n" % report)
+        with open(os.path.join(preset_dir, 'auc.txt'), 'w') as report_file:
+            report_file.write("%r\n\n%r\n" % report)
 
     print("Done.")
 
