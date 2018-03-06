@@ -55,7 +55,21 @@ def test_rnn():
     )
 
 
-@features('clean1')
+@features('clean1', 'num2')
+def test_rnn_feats():
+    return KerasRNN(
+        num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
+        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
+        model_opts=dict(
+            out_activation='sigmoid',
+            text_emb_size=8,
+            rnn_layers=[8],
+            mlp_layers=[]
+        )
+    )
+
+
+@features('clean1', 'sentiment1')
 def test_rnn_ext():
     return OnExtendedData(KerasRNN(
         num_epochs=1, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
@@ -128,6 +142,106 @@ def lr3():
                 stop_words='english',
                 ngram_range=(2, 6),
                 max_features=50000)),
+            DropColumns(['comment_text']),
+        ),
+        MultiProba(LogisticRegression())
+    )
+
+
+@features('clean2', 'num1')
+def lr3_cl2():
+    return make_pipeline(
+        make_union(
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='word',
+                token_pattern=r'\w{1,}',
+                stop_words='english',
+                ngram_range=(1, 1),
+                max_features=10000)),
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='char',
+                stop_words='english',
+                ngram_range=(2, 6),
+                max_features=50000)),
+            DropColumns(['comment_text']),
+        ),
+        MultiProba(LogisticRegression())
+    )
+
+
+@features('clean1', 'num1', 'num2', 'sentiment1')
+def lr3_more_feats():
+    return make_pipeline(
+        make_union(
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='word',
+                token_pattern=r'\w{1,}',
+                stop_words='english',
+                ngram_range=(1, 1),
+                max_features=10000)),
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='char',
+                stop_words='english',
+                ngram_range=(2, 6),
+                max_features=50000)),
+            DropColumns(['comment_text']),
+        ),
+        MultiProba(LogisticRegression())
+    )
+
+
+@features('clean1', 'num1')
+def lr3_more_ngrams():
+    return make_pipeline(
+        make_union(
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='word',
+                token_pattern=r'\w{1,}',
+                stop_words='english',
+                ngram_range=(1, 1),
+                max_features=10000)),
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='char',
+                stop_words='english',
+                ngram_range=(2, 6),
+                max_features=60000)),
+            DropColumns(['comment_text']),
+        ),
+        MultiProba(LogisticRegression())
+    )
+
+
+@features('clean2', 'num1', 'num2', 'sentiment1')
+def lr4():
+    return make_pipeline(
+        make_union(
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='word',
+                token_pattern=r'\w{1,}',
+                stop_words='english',
+                ngram_range=(1, 1),
+                max_features=10000)),
+            OnColumn('comment_text', TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='char',
+                stop_words='english',
+                ngram_range=(2, 6),
+                max_features=60000)),
             DropColumns(['comment_text']),
         ),
         MultiProba(LogisticRegression())
@@ -354,6 +468,66 @@ def bigru_sterby_2_num():
     )
 
 
+@features('clean2_corrected_fasttext', 'num1', 'sentiment1')
+def bigru_sterby_2_num_sent():
+    return KerasRNN(
+        num_epochs=50, batch_size=1000, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.35,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5
+        )
+    )
+
+
+@features('clean2_corrected_fasttext', 'num1', 'num2', 'sentiment1')
+def bigru_sterby_2_num_sent_longer():
+    return KerasRNN(
+        num_epochs=50, batch_size=1000, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        num_text_words=50000, max_text_len=150,
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.35,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5
+        )
+    )
+
+
+@param_search_space(
+    out_dropout=hp.uniform('out_dropout', 0.2, 0.6),
+    text_emb_dropout=hp.uniform('text_emb_dropout', 0.3, 0.7),
+    lr=hp.loguniform('lr', -9.2, -4.6),
+    rnn_size=hp.quniform('rnn_size', 32, 128, 16),
+)
+@features('clean2_corrected_fasttext', 'num1', 'num2', 'sentiment1')
+def bigru_sterby_2_num_sent_longer_rand(out_dropout=0.35, text_emb_dropout=0.5, lr=1e-3, rnn_size=80):
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=500), dict(num_epochs=10, batch_size=1000), dict(num_epochs=40, batch_size=2000)],
+        external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        num_text_words=50000, max_text_len=150,
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=lr,
+            rnn_size=rnn_size, rnn_pooling='sterby',
+            out_dropout=out_dropout,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=text_emb_dropout, text_emb_rand_std=0.3,
+        )
+    )
+
+
 @features('clean2_corrected_fasttext')
 def bigru_sterby_2_ext():
     return OnExtendedData(max_len=70, decay=0.8, n_samples=40000, model=KerasRNN(
@@ -370,6 +544,79 @@ def bigru_sterby_2_ext():
         )
     ))
 
+
+@features('clean2_corrected_fasttext', 'num1')
+def bigru_sterby_3():
+    return KerasRNN(
+        num_epochs=50, batch_size=1000, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_2,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.35, num_layer_size=16,
+            text_emb_fix_size=300, text_emb_fix_file=input_file('crawl-300d-2M.vec'), text_emb_free_size=8, text_emb_dropout=0.5
+        )
+    )
+
+
+@features('clean2_bpe50k', 'num1', 'num2', 'sentiment1')
+def bigru_sterby_4_bpe50k():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=500), dict(num_epochs=10, batch_size=1000), dict(num_epochs=40, batch_size=2000)],
+        external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        max_text_len=150,
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.35,
+            text_emb_size=300, text_emb_file=input_file('en.wiki.bpe.op50000.d300.w2v.txt'), text_emb_dropout=0.5, text_emb_rand_std=0.3,
+        )
+    )
+
+
+@features('clean2_bpe25k', 'num1', 'num2', 'sentiment1')
+def bigru_sterby_4_bpe25k():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=500), dict(num_epochs=10, batch_size=1000), dict(num_epochs=40, batch_size=2000)],
+        external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        max_text_len=150,
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.35,
+            text_emb_size=300, text_emb_file=input_file('en.wiki.bpe.op25000.d300.w2v.txt'), text_emb_dropout=0.5, text_emb_rand_std=0.3,
+        )
+    )
+
+
+@features('clean2_bpe10k', 'num1', 'num2', 'sentiment1')
+def bigru_sterby_4_bpe10k():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=500), dict(num_epochs=10, batch_size=1000), dict(num_epochs=40, batch_size=2000)],
+        external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        max_text_len=150,
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.35,
+            text_emb_size=300, text_emb_file=input_file('en.wiki.bpe.op10000.d300.w2v.txt'), text_emb_dropout=0.5, text_emb_rand_std=0.3,
+        )
+    )
 # L2
 
 
@@ -440,6 +687,38 @@ def l2_avg3():
 
 @submodels('lr2', 'lr3', 'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2')
 def l2_avg4():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )
+
+
+@submodels('lr2', 'lr3', 'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num')
+def l2_avg5():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )
+
+
+@submodels(
+    'lr2', 'lr3',
+    'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2',
+    'bigru_sterby_2_num', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_4_bpe50k'
+)
+def l2_avg6():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2',
+    'bigru_sterby_2_num', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_4_bpe50k'
+)
+def l2_avg7():
     return make_pipeline(
         DropColumns(['comment_text']),
         SimpleAverage(),

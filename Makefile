@@ -13,7 +13,9 @@ input:
 	cd input && wget http://nlp.stanford.edu/data/glove.42B.300d.zip && unzip glove.42B.300d.zip
 	cd input && wget http://nlp.stanford.edu/data/glove.twitter.27B.zip && unzip glove.twitter.27B.zip
 	cd input && wget https://s3-us-west-1.amazonaws.com/fasttext-vectors/crawl-300d-2M.vec.zip && unzip crawl-300d-2M.vec.zip
-
+	cd input && wget http://cosyne.h-its.org/bpemb/data/en/en.wiki.bpe.op50000.model && wget http://cosyne.h-its.org/bpemb/data/en/en.wiki.bpe.op50000.d300.w2v.txt.tar.gz && tar xf en.wiki.bpe.op50000.d300.w2v.txt.tar.gz
+	cd input && wget http://cosyne.h-its.org/bpemb/data/en/en.wiki.bpe.op25000.model && wget http://cosyne.h-its.org/bpemb/data/en/en.wiki.bpe.op25000.d300.w2v.txt.tar.gz && tar xf en.wiki.bpe.op25000.d300.w2v.txt.tar.gz
+	cd input && wget http://cosyne.h-its.org/bpemb/data/en/en.wiki.bpe.op10000.model && wget http://cosyne.h-its.org/bpemb/data/en/en.wiki.bpe.op10000.d300.w2v.txt.tar.gz && tar xf en.wiki.bpe.op10000.d300.w2v.txt.tar.gz
 
 # Inspired by <http://marmelab.com/blog/2016/02/29/auto-documented-makefile.html>
 # sed script explained:

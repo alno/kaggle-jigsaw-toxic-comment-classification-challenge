@@ -3,8 +3,12 @@ import string
 import unicodedata
 
 import pandas as pd
+import numpy as np
 
 from collections import Counter
+
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from nltk import tokenize
 
 
 def clean1(raw):
@@ -114,3 +118,68 @@ def num1(raw):
     df['cap_ratio'] = raw['comment_text'].map(cap_ratio)
     df['exq_ratio'] = raw['comment_text'].map(exq_ratio)
     return df
+
+
+def num2(clean2):
+    res = []
+    for line in clean2['comment_text']:
+        sents = tokenize.sent_tokenize(line)
+        words = re.findall(r'(?u)\b\w\w+\b', line)
+
+        res.append(dict(
+            num_sents=len(sents),
+            num_words=len(words),
+            mean_sent_len=np.mean(list(map(len, sents))) if len(sents) > 0 else 0,
+            mean_sent_len_words=np.mean([len(re.findall(r'(?u)\b\w\w+\b', s)) for s in sents]) if len(sents) > 0 else 0,
+            mean_word_len=np.mean(list(map(len, words))) if len(words) > 0 else 0,
+            uniq_word_ratio=len(set(words)) / (len(words) + 1e-3),
+        ))
+
+    return pd.DataFrame.from_records(res, index=clean2.index)
+
+
+def sentiment1(raw):
+    analyzer = SentimentIntensityAnalyzer()
+    res = []
+    for text in raw['comment_text']:
+        res.append(analyzer.polarity_scores(text))
+    return pd.DataFrame.from_records(res, index=raw.index)
+
+
+def clean2_bpe50k(clean2):
+    import sentencepiece as spm
+
+    sp = spm.SentencePieceProcessor()
+    sp.Load("input/en.wiki.bpe.op50000.model")
+
+    def apply_bpe(line):
+        line = re.sub(r'\s+', ' ', line).lower().strip()
+        return ' '.join(sp.EncodeAsPieces(line))
+
+    return clean2.applymap(apply_bpe)
+
+
+def clean2_bpe25k(clean2):
+    import sentencepiece as spm
+
+    sp = spm.SentencePieceProcessor()
+    sp.Load("input/en.wiki.bpe.op25000.model")
+
+    def apply_bpe(line):
+        line = re.sub(r'\s+', ' ', line).lower().strip()
+        return ' '.join(sp.EncodeAsPieces(line))
+
+    return clean2.applymap(apply_bpe)
+
+
+def clean2_bpe10k(clean2):
+    import sentencepiece as spm
+
+    sp = spm.SentencePieceProcessor()
+    sp.Load("input/en.wiki.bpe.op10000.model")
+
+    def apply_bpe(line):
+        line = re.sub(r'\s+', ' ', line).lower().strip()
+        return ' '.join(sp.EncodeAsPieces(line))
+
+    return clean2.applymap(apply_bpe)
