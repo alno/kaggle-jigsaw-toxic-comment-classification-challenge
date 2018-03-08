@@ -581,12 +581,12 @@ def bigru_sterby_4_bpe50k():
     )
 
 
-@features('clean2_bpe25k', 'num1', 'num2', 'sentiment1')
+@features('clean2_bpe25k', 'num1')
 def bigru_sterby_4_bpe25k():
     return KerasRNN(
         train_schedule=[dict(num_epochs=3, batch_size=500), dict(num_epochs=10, batch_size=1000), dict(num_epochs=40, batch_size=2000)],
         external_metrics=dict(roc_auc=roc_auc_score),
-        text_truncating='post', text_padding='post',
+        text_truncating='post', text_padding='post', text_tokenizer_opts=dict(filters='', lower=False),
         max_text_len=150,
         early_stopping_opts=dict(patience=6),
         compile_opts=None,
@@ -617,6 +617,178 @@ def bigru_sterby_4_bpe10k():
             text_emb_size=300, text_emb_file=input_file('en.wiki.bpe.op10000.d300.w2v.txt'), text_emb_dropout=0.5, text_emb_rand_std=0.3,
         )
     )
+
+
+def bigru_cnn_1():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=2, batch_size=512)],
+        external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='pre', text_padding='pre',
+        num_text_words=100000, max_text_len=150,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=128, out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('glove.42B.300d.txt'), text_emb_dropout=0.4
+        )
+    )
+
+
+@features('clean2')
+def bigru_cnn_2():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=5, batch_size=256), dict(num_epochs=40, batch_size=512)],
+        external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='pre', text_padding='pre',
+        num_text_words=100000, max_text_len=150,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=128, rnn_dropout=0.2, out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.4
+        )
+    )
+
+
+@features('clean2_no_punct')
+def bigru_cnn_3():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=10, batch_size=1024)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='pre', text_padding='pre',
+        num_text_words=100000, max_text_len=150,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=128, rnn_dropout=0.3, out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+        )
+    )
+
+
+@features('clean2_no_punct')
+def bigru_rcnn_1():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=10, batch_size=1024)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='pre', text_padding='pre',
+        num_text_words=100000, max_text_len=150,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_rcnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=96, rnn_dropout=0.3, rnn_dense_activation='relu', out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+        )
+    )
+
+
+@features('clean2_expand_no_punct', 'num1', 'ind1')
+def bigru_rcnn_2():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=10, batch_size=1024)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='pre', text_padding='pre',
+        num_text_words=100000, max_text_len=150,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_rcnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=96, rnn_dropout=0.3, rnn_dense_activation='relu', out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+        )
+    )
+
+
+@features('clean2_expand_no_punct', 'num1', 'ind1')
+def bigru_rcnn_3():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=20, batch_size=1024)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='pre', text_padding='pre',
+        num_text_words=100000, max_text_len=150,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_rcnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=96, rnn_dropout=0.3,
+            mlp_layers=[64], mlp_dropout=0.2, out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+        )
+    )
+
+
+@features('clean2_expand_no_punct_lemmatize', 'num1', 'ind1')
+def bigru_rcnn_4():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=20, batch_size=1024)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='pre', text_padding='pre',
+        num_text_words=100000, max_text_len=150,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_rcnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=96, rnn_dropout=0.3,
+            mlp_layers=[64], mlp_dropout=0.2, out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+        )
+    )
+
+
+@features('clean2_expand_no_punct_lemmatize', 'num1', 'num2', 'ind1', 'sentiment1')
+def bigru_cnn_4():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=4, batch_size=1024), dict(num_epochs=10, batch_size=2048)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        num_text_words=100000, max_text_len=200,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=128, rnn_dropout=0.3, out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+        )
+    )
+
+
+@param_search_space(
+    out_dropout=hp.uniform('out_dropout', 0.2, 0.6),
+    text_emb_dropout=hp.uniform('text_emb_dropout', 0.3, 0.7),
+    lr=hp.loguniform('lr', -9.2, -4.6),
+    rnn_size=hp.quniform('rnn_size', 32, 128, 16),
+)
+@features('clean2_expand_no_punct_lemmatize', 'num1', 'num2', 'ind1', 'sentiment1')
+def bigru_sterby_5(out_dropout=0.35, text_emb_dropout=0.5, lr=1e-3, rnn_size=80):
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=500), dict(num_epochs=10, batch_size=1000), dict(num_epochs=40, batch_size=2000)],
+        external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        num_text_words=50000, max_text_len=200,
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=lr,
+            rnn_size=rnn_size, rnn_pooling='sterby',
+            out_dropout=out_dropout,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=text_emb_dropout, text_emb_rand_std=0.3,
+        )
+    )
+
+
 # L2
 
 
@@ -719,6 +891,19 @@ def l2_avg6():
     'bigru_sterby_2_num', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_4_bpe50k'
 )
 def l2_avg7():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2',
+    'bigru_sterby_2_num', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_4_bpe50k',
+    'bigru_cnn_3'
+)
+def l2_avg8():
     return make_pipeline(
         DropColumns(['comment_text']),
         SimpleAverage(),

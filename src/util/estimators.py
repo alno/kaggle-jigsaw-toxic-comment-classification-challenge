@@ -78,6 +78,4 @@ class OnExtendedData:
         generated_X = left_X.reset_index(drop=True) + ' ' + right_X.reset_index(drop=True)
         generated_y = ((left_y.reset_index(drop=True) + right_y.reset_index(drop=True)) * self.decay).clip(upper=1)
 
-        pd.concat((generated_X, generated_y), axis=1).to_csv('generated.csv')
-
         return pd.concat((train_X, generated_X)), pd.concat((train_y, generated_y))

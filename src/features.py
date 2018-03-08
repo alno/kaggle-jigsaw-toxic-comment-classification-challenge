@@ -11,6 +11,12 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from nltk import tokenize
 
 
+def count_regexp_occ(regexp, text):
+    """ Simple way to get the number of occurence of a regex"""
+    return len(re.findall(regexp, text))
+
+
+
 def clean1(raw):
     def clean(line):
         line = re.sub('[\s\n\t_]+', ' ', ' ' + line.lower() + ' ')  # replace sequence of spacing symbols with single space
@@ -105,6 +111,48 @@ def clean2_corrected_fasttext(clean2):
     return clean2.applymap(correct_line)
 
 
+def clean2_no_punct(clean2):
+    def rm_punct(x):
+        return re.sub(r'[^\w\s]', ' ', x)
+
+    return clean2.applymap(rm_punct)
+
+
+def clean2_expand_no_punct(clean2):
+    expand_patterns = [
+        (r'US', 'United States'),
+        (r'IT', 'Information Technology'),
+        (r'(W|w)on\'t', 'will not'),
+        (r'(C|c)an\'t', 'can not'),
+        (r'(I|i)\'m', 'i am'),
+        (r'(A|a)in\'t', 'is not'),
+        (r'(\w+)\'ll', '\g<1> will'),
+        (r'(\w+)n\'t', '\g<1> not'),
+        (r'(\w+)\'ve', '\g<1> have'),
+        (r'(\w+)\'s', '\g<1> is'),
+        (r'(\w+)\'re', '\g<1> are'),
+        (r'(\w+)\'d', '\g<1> would'),
+    ]
+
+    def expand_rm_punct(x):
+        for pattern, repl in expand_patterns:
+            x = re.sub(pattern, repl, x)
+        return re.sub(r'[^\w\s]', ' ', x)
+
+    return clean2.applymap(expand_rm_punct)
+
+
+def clean2_expand_no_punct_lemmatize(clean2_expand_no_punct):
+    from nltk.stem import WordNetLemmatizer
+
+    wordnet_lemmatizer = WordNetLemmatizer()
+
+    def lemmatize(x):
+        return ' '.join(map(wordnet_lemmatizer.lemmatize, x.split()))
+
+    return clean2_expand_no_punct.applymap(lemmatize)
+
+
 def num1(raw):
     def cap_ratio(line):
         line = re.sub('\W', '', line)
@@ -183,3 +231,48 @@ def clean2_bpe10k(clean2):
         return ' '.join(sp.EncodeAsPieces(line))
 
     return clean2.applymap(apply_bpe)
+
+
+def ind1(raw):
+    text = raw["comment_text"]
+    df = pd.DataFrame(index=raw.index)
+
+    # Count number of \n
+    df["ant_slash_n"] = text.apply(lambda x: count_regexp_occ(r"\n", x))
+    # Get length in words and characters
+    df["raw_word_len"] = text.apply(lambda x: len(x.split()))
+    df["raw_char_len"] = text.apply(lambda x: len(x))
+    # Check number of upper case, if you're angry you may write in upper case
+    df["nb_upper"] = text.apply(lambda x: count_regexp_occ(r"[A-Z]", x))
+    # Number of F words - f..k contains folk, fork,
+    df["nb_fk"] = text.apply(lambda x: count_regexp_occ(r"[Ff]\S{2}[Kk]", x))
+    # Number of S word
+    df["nb_sk"] = text.apply(lambda x: count_regexp_occ(r"[Ss]\S{2}[Kk]", x))
+    # Number of D words
+    df["nb_dk"] = text.apply(lambda x: count_regexp_occ(r"[dD]ick", x))
+    # Number of occurence of You, insulting someone usually needs someone called : you
+    df["nb_you"] = text.apply(lambda x: count_regexp_occ(r"\W[Yy]ou\W", x))
+    # Just to check you really refered to my mother ;-)
+    df["nb_mother"] = text.apply(lambda x: count_regexp_occ(r"\Wmother\W", x))
+    # Just checking for toxic 19th century vocabulary
+    df["nb_ng"] = text.apply(lambda x: count_regexp_occ(r"\Wnigger\W", x))
+    # Some Sentences start with a <:> so it may help
+    df["start_with_columns"] = text.apply(lambda x: count_regexp_occ(r"^\:+", x))
+    # Check for time stamp
+    df["has_timestamp"] = text.apply(lambda x: count_regexp_occ(r"\d{2}|:\d{2}", x))
+    # Check for dates 18:44, 8 December 2010
+    df["has_date_long"] = text.apply(lambda x: count_regexp_occ(r"\D\d{2}:\d{2}, \d{1,2} \w+ \d{4}", x))
+    # Check for date short 8 December 2010
+    df["has_date_short"] = text.apply(lambda x: count_regexp_occ(r"\D\d{1,2} \w+ \d{4}", x))
+    # Check for http links
+    df["has_http"] = text.apply(lambda x: count_regexp_occ(r"http[s]{0,1}://\S+", x))
+    # check for mail
+    df["has_mail"] = text.apply(
+        lambda x: count_regexp_occ(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', x)
+    )
+    # Looking for words surrounded by == word == or """" word """"
+    df["has_emphasize_equal"] = text.apply(lambda x: count_regexp_occ(r"\={2}.+\={2}", x))
+    df["has_emphasize_quotes"] = text.apply(lambda x: count_regexp_occ(r"\"{4}\S+\"{4}", x))
+
+    return df
+
