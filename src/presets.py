@@ -9,6 +9,7 @@ from scipy.special import expit
 from src.util.estimators import MultiProba, SimpleAverage, WeightedAverage, OnExtendedData
 from src.util.preprocessors import OnColumn, DropColumns
 from src.meta import input_file
+from src import augmentations
 
 import src.models.keras as keras_models
 import src.models.tensorflow as tf_models
@@ -88,6 +89,23 @@ def test_tf():
     return tf_models.TfModel(
         num_epochs=1, batch_size=3000,
         model_opts=dict(emb_size=8, rnn_size=8)
+    )
+
+
+@features('clean1')
+def test_rnn_aug():
+    return keras_models.AugmentedModel(
+        num_epochs=3, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
+        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
+        train_augmentations=[augmentations.RandomCrop(min_len=0.5, max_len=100)],
+        predict_augmentations=[augmentations.RandomCrop(min_len=0.5, max_len=100)],
+        predict_passes=2,
+        model_opts=dict(
+            out_activation='sigmoid',
+            text_emb_size=8,
+            rnn_layers=[8],
+            mlp_layers=[]
+        )
     )
 
 ## L1 models
@@ -789,6 +807,48 @@ def bigru_sterby_5(out_dropout=0.35, text_emb_dropout=0.5, lr=1e-3, rnn_size=80)
     )
 
 
+@features('clean2_no_punct', 'num1')
+def bigru_cnn_5_aug():
+    return keras_models.AugmentedModel(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=4, batch_size=1024), dict(num_epochs=10, batch_size=2048)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='pre', text_padding='pre',
+        num_text_words=100000, max_text_len=100,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=128, rnn_dropout=0.2, out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.45, text_emb_rand_std=0.3
+        ),
+        train_augmentations=[augmentations.RandomCrop(min_len=0.9, max_len=100)],
+        predict_augmentations=[augmentations.RandomCrop(min_len=0.9, max_len=100)],
+        predict_passes=4,
+    )
+
+
+
+@features('clean2_corrected_fasttext', 'num1')
+def bigru_sterby_2_num_aug():
+    return keras_models.AugmentedModel(
+        num_epochs=50, batch_size=1000, predict_batch_size=2048, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.35,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+        ),
+        train_augmentations=[augmentations.RandomCrop(min_len=0.9, max_len=100)],
+        predict_augmentations=[augmentations.RandomCrop(min_len=0.9, max_len=100)],
+        predict_passes=8,
+    )
+
+
 # L2
 
 
@@ -904,6 +964,19 @@ def l2_avg7():
     'bigru_cnn_3'
 )
 def l2_avg8():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2',
+    'bigru_sterby_2_num', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_4_bpe50k',
+    'bigru_cnn_3', 'bigru_cnn_4', 'bigru_sterby_5'
+)
+def l2_avg9():
     return make_pipeline(
         DropColumns(['comment_text']),
         SimpleAverage(),

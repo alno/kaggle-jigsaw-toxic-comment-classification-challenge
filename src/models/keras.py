@@ -2,7 +2,8 @@ from keras.models import Sequential, Model
 from keras.layers import InputLayer, Input, Embedding, Dense, Dropout, Bidirectional, GlobalMaxPool1D, GlobalAveragePooling1D, SpatialDropout1D, Conv1D, CuDNNLSTM, CuDNNGRU, TimeDistributed, concatenate
 from keras.optimizers import Adam
 
-from kgutil.models.keras.rnn import load_emb_matrix
+from kgutil.models.keras.base import DefaultTrainSequence, DefaultTestSequence
+from kgutil.models.keras.rnn import KerasRNN, load_emb_matrix
 
 
 def cudnn_lstm_1(
@@ -281,3 +282,38 @@ def bigru_rcnn_2(
     model = Model(inputs, out)
     model.compile(loss='binary_crossentropy', optimizer=Adam(lr=lr))
     return model
+
+
+
+class MultiStep:
+
+    def __init__(self, steps):
+        self.steps = steps
+
+    def transform(self, X):
+        for step in self.steps:
+            X = step.transform(X)
+        return X
+
+
+class AugmentedModel(KerasRNN):
+
+    def __init__(self,
+        _sentinel=None,
+        train_augmentations=[], predict_augmentations=[],
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+
+        self.train_augmentations = train_augmentations
+        self.predict_augmentations = predict_augmentations
+
+    def _build_train_sequence(self, X, y, batch_size):
+        return DefaultTrainSequence(
+            MultiStep(self.train_augmentations + [self.data_transformer]),
+            self.target_transformer, X, y, batch_size)
+
+    def _build_test_sequence(self, X, batch_size):
+        return DefaultTestSequence(
+            MultiStep(self.predict_augmentations + [self.data_transformer]),
+            X, batch_size)
