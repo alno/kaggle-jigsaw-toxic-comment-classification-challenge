@@ -27,3 +27,20 @@ class RandomCrop:
         offset = random.randint(0, len(words) - length)
 
         return ' '.join(words[offset:offset+length])
+
+
+class RandomTranslation:
+
+    def __init__(self, prob=0.2):
+        self.prob = prob
+        self.langs = ['de', 'fr', 'es']
+
+    def transform(self, X):
+        replace = np.random.rand(len(X))
+        langs = np.random.choice(self.langs, size=len(X))
+
+        res = X.copy()
+        for i, r, lang in zip(X.index, replace, langs):
+            if r < self.prob:
+                res.loc[i, 'comment_text'] = X.loc[i, 'comment_text__%s' % lang]
+        return res

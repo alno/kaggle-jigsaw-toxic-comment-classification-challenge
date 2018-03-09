@@ -48,7 +48,7 @@ def main():
         for submodel in preset.submodels:
             submodel_val_p = []
             for fold in range(meta.cv.n_splits):
-                submodel_val_p.append(meta.get_model_prediction(submodel, fold, 'val'))
+                submodel_val_p.append(meta.get_model_prediction(submodel, fold, 'val').add_prefix(submodel + '__'))
             submodel_val_p = pd.concat(submodel_val_p).loc[train_X[0].index]
             train_X.append(submodel_val_p)
         train_X = pd.concat(train_X, axis=1)
@@ -85,7 +85,7 @@ def main():
             if hasattr(preset, 'submodels'):
                 fold_test_X = [fold_test_X]
                 for submodel in preset.submodels:
-                    fold_test_X.append(meta.get_model_prediction(submodel, fold, 'test'))
+                    fold_test_X.append(meta.get_model_prediction(submodel, fold, 'test').add_prefix(submodel + '__'))
                 fold_test_X = pd.concat(fold_test_X, axis=1)
 
             # Fit the model

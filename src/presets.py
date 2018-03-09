@@ -92,7 +92,7 @@ def test_tf():
     )
 
 
-@features('clean1')
+@features('multilang_clean3_corrected_fasttext')
 def test_rnn_aug():
     return keras_models.AugmentedModel(
         num_epochs=3, batch_size=3000, external_metrics=dict(roc_auc=roc_auc_score),
@@ -840,13 +840,90 @@ def bigru_sterby_2_num_aug():
         model_opts=dict(
             lr=1e-3,
             rnn_size=80, rnn_pooling='sterby',
-            out_dropout=0.35,
-            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+            out_dropout=0.3,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.4, text_emb_rand_std=0.1
         ),
         train_augmentations=[augmentations.RandomCrop(min_len=0.9, max_len=100)],
         predict_augmentations=[augmentations.RandomCrop(min_len=0.9, max_len=100)],
         predict_passes=8,
     )
+
+
+@features('multilang_clean3_corrected_fasttext', 'num1')
+def bigru_sterby_2_num_aug2():
+    return keras_models.AugmentedModel(
+        num_epochs=50, batch_size=1000, predict_batch_size=2048, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post', ignore_columns=['comment_text__de', 'comment_text__fr', 'comment_text__es'],
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=5e-4,
+            rnn_size=80, rnn_pooling='sterby',
+            out_dropout=0.3,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.4, text_emb_rand_std=0.05
+        ),
+        train_augmentations=[augmentations.RandomTranslation(0.3)],
+    )
+
+
+@features('multilang_clean3_corrected_fasttext', 'num1')
+def bigru_sterby_3_num_aug2():
+    return keras_models.AugmentedModel(
+        num_epochs=50, batch_size=1000, predict_batch_size=2048, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post', ignore_columns=['comment_text__de', 'comment_text__fr', 'comment_text__es'],
+        early_stopping_opts=dict(patience=6),
+        compile_opts=None,
+        model_fn=keras_models.bigru_1,
+        model_opts=dict(
+            lr=5e-4,
+            rnn_size=128, rnn_pooling='sterby',
+            out_dropout=0.3,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.4, text_emb_rand_std=0.05
+        ),
+        train_augmentations=[augmentations.RandomTranslation(0.3)],
+    )
+
+
+@features('multilang_clean3_corrected_fasttext', 'num1', 'num2', 'ind1', 'sentiment1')
+def bigru_cnn_4_aug2():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=4, batch_size=1024), dict(num_epochs=10, batch_size=2048)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        num_text_words=100000, max_text_len=200,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=128, rnn_dropout=0.3, out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+        ),
+        train_augmentations=[augmentations.RandomTranslation(0.3)],
+    )
+
+
+@features('multilang_clean3_corrected_fasttext', 'num1', 'num2', 'ind1', 'sentiment1')
+def bigru_cnn_4_aug3():
+    return KerasRNN(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=4, batch_size=1024), dict(num_epochs=10, batch_size=2048)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post',
+        num_text_words=100000, max_text_len=150,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=128, rnn_dropout=0.3, out_dropout=0.2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.5, text_emb_rand_std=0.3
+        ),
+        train_augmentations=[augmentations.RandomTranslation(0.3), augmentations.RandomCrop(min_len=0.9, max_len=150)],
+        predict_augmentations=[augmentations.RandomCrop(min_len=0.9, max_len=150)],
+        predict_passes=8,
+    )
+
 
 
 # L2
@@ -874,6 +951,19 @@ def l2_avg2():
     return make_pipeline(
         DropColumns(['comment_text']),
         SimpleAverage(),
+    )
+
+
+@submodels('cudnn_lstm_2', 'rnn_pretrained_4')
+def l2_ker1():
+    return KerasRNN(
+        num_epochs=5, batch_size=2000, external_metrics=dict(roc_auc=roc_auc_score),
+        ignore_columns=['comment_text'],
+        compile_opts=dict(loss='binary_crossentropy', optimizer='sgd'),
+        model_fn=keras_models.stack1,
+        model_opts=dict(
+            l2=1e-6
+        )
     )
 
 
@@ -980,4 +1070,54 @@ def l2_avg9():
     return make_pipeline(
         DropColumns(['comment_text']),
         SimpleAverage(),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2',
+    'bigru_sterby_2_num', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_4_bpe50k',
+    'bigru_cnn_3', 'bigru_cnn_4', 'bigru_sterby_5'
+)
+def l2_lr2():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        FunctionTransformer(expit),
+        MultiProba(LogisticRegression(C=1e-2))
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2',
+    'bigru_sterby_2_num', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_4_bpe50k',
+    'bigru_cnn_3', 'bigru_cnn_4', 'bigru_sterby_5'
+)
+def l2_ker2():
+    return KerasRNN(
+        num_epochs=15, batch_size=2000, external_metrics=dict(roc_auc=roc_auc_score),
+        ignore_columns=['comment_text'],
+        compile_opts=dict(loss='binary_crossentropy', optimizer='sgd'),
+        model_fn=keras_models.stack1,
+        model_opts=dict(
+            l2=1e-6, shared=False
+        )
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2',
+    'bigru_sterby_2_num', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_4_bpe50k',
+    'bigru_cnn_3', 'bigru_cnn_4', 'bigru_sterby_5'
+)
+def l2_ker3():
+    return KerasRNN(
+        num_epochs=150, batch_size=2000, external_metrics=dict(roc_auc=roc_auc_score),
+        ignore_columns=['comment_text'],
+        compile_opts=dict(loss='binary_crossentropy', optimizer='sgd'),
+        model_fn=keras_models.stack2,
+        model_opts=dict(
+            l2=1e-6, shared=False
+        )
     )

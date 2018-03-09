@@ -10,6 +10,8 @@ from collections import Counter
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from nltk import tokenize
 
+from joblib import Parallel, delayed
+
 
 def count_regexp_occ(regexp, text):
     """ Simple way to get the number of occurence of a regex"""
@@ -58,12 +60,12 @@ def clean2(raw):
     return raw.applymap(clean)
 
 
-def clean2_corrected_fasttext(clean2):
+def apply_corrections(df, vectors):
     alphabet = string.ascii_lowercase
     corrector_cache = {}
 
-    fasttext_voc = set(line.split()[0] for line in open('input/crawl-300d-2M.vec'))
-    clean_voc = Counter(w for line in clean2['comment_text'] for w in re.findall(r'(?u)\b\w\w+\b', line) if w in fasttext_voc)
+    fasttext_voc = set(line.split()[0] for line in open(vectors))
+    clean_voc = Counter(w for line in df['comment_text'] for w in re.findall(r'(?u)\b\w\w+\b', line) if w in fasttext_voc)
 
     def edits1(word):
         splits = [(word[:i], word[i:]) for i in range(len(word) + 1)]
@@ -104,11 +106,18 @@ def clean2_corrected_fasttext(clean2):
         return corrs
 
     def correct_line(line):
+        if isinstance(line, float): # skip nan
+            return line
+
         words = re.findall(r'(?u)\b\w\w+\b', line)
         words = [sw for w in words for sw in correct(w)]
         return ' '.join(words)
 
-    return clean2.applymap(correct_line)
+    return df.applymap(correct_line)
+
+
+def clean2_corrected_fasttext(clean2):
+    return apply_corrections(clean2, 'input/crawl-300d-2M.vec')
 
 
 def clean2_no_punct(clean2):
@@ -276,3 +285,86 @@ def ind1(raw):
 
     return df
 
+
+def translate(comment, language):
+    from textblob import TextBlob
+    from textblob.translate import NotTranslated
+
+    if hasattr(comment, "decode"):
+        comment = comment.decode("utf-8")
+
+    text = TextBlob(comment)
+    try:
+        text = text.translate(to=language)
+        text = text.translate(to="en")
+    except NotTranslated:
+        pass
+
+    return str(text)
+
+
+def multilang(raw):
+    df = raw.copy()
+    langs = ['de', 'fr', 'es']
+
+    if False:
+        parallel = Parallel(300, backend="threading", verbose=5)
+        for language in langs:
+            print('Translate comments using "{0}" language'.format(language))
+            df['comment_text__%s' % language] = parallel(delayed(translate)(comment, language) for comment in raw['comment_text'])
+    else:
+        for language in langs:
+            df['comment_text__%s' % language] = pd.read_csv('input/train_%s.csv' % language, index_col='id')['comment_text'].loc[df.index]
+
+    return df
+
+
+def multilang_clean3(multilang):
+    url_pattern = re.compile(r"""(?i)\b((?:[a-z][\w-]+:(?:/{1,3}|[a-z0-9%])|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))""")
+
+    expand_patterns = [
+        (r'US', 'United States'),
+        (r'IT', 'Information Technology'),
+        (r'(W|w)on\'t', 'will not'),
+        (r'(C|c)an\'t', 'can not'),
+        (r'(I|i)\'m', 'i am'),
+        (r'(A|a)in\'t', 'is not'),
+        (r'(\w+)\'ll', '\g<1> will'),
+        (r'(\w+)n\'t', '\g<1> not'),
+        (r'(\w+)\'ve', '\g<1> have'),
+        (r'(\w+)\'s', '\g<1> is'),
+        (r'(\w+)\'re', '\g<1> are'),
+        (r'(\w+)\'d', '\g<1> would'),
+    ]
+
+    def clean(line):
+        if isinstance(line, float): # skip nan
+            return line
+
+        line = re.sub(r'[\s\n\t_]+', ' ', ' ' + line.lower() + ' ')  # replace sequence of spacing symbols with single space
+        line = line.replace('\xad', '')
+        line = re.sub(r'\[\d+\]', '', line)  # remove wiki references
+        line = unicodedata.normalize('NFKD', line)  # normalize unicode
+        line = line.encode("ascii", errors="ignore").decode()  # remove non-ascii
+
+        line = re.sub(url_pattern, ' urltoken ', line)  # urls
+
+        line = re.sub(r'([0-9a-f]+:+)[0-9a-f]+', ' iptoken ', line)  # ipv6 addresses
+        line = re.sub(r'([0-9]+\.+){2,}[0-9]+', ' iptoken ', line)  # ipv4 addresses
+
+        line = re.sub(r'(\d)([^\d])', '\\1 \\2', line)  # split 5million
+        line = re.sub(r'([^\d])(\d)', '\\1 \\2', line)  # split wikipedia86
+        line = re.sub(r'\d\d+', '00', line)  # replace big numerics with 00
+
+        line = re.sub(r'(.)\1{2,}', r'\1', line)  # replace identical consecutive characters
+
+        for pattern, repl in expand_patterns:
+            line = re.sub(pattern, repl, line)
+
+        return line
+
+    return multilang.applymap(clean)
+
+
+def multilang_clean3_corrected_fasttext(multilang_clean3):
+    return apply_corrections(multilang_clean3, 'input/crawl-300d-2M.vec')

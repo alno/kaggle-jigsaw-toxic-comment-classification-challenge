@@ -1,6 +1,7 @@
 from keras.models import Sequential, Model
-from keras.layers import InputLayer, Input, Embedding, Dense, Dropout, Bidirectional, GlobalMaxPool1D, GlobalAveragePooling1D, SpatialDropout1D, Conv1D, CuDNNLSTM, CuDNNGRU, TimeDistributed, concatenate
+from keras.layers import InputLayer, Input, Embedding, Dense, Dropout, Bidirectional, GlobalMaxPool1D, GlobalAveragePooling1D, SpatialDropout1D, Conv1D, CuDNNLSTM, CuDNNGRU, TimeDistributed, Reshape, Permute, LocallyConnected1D, concatenate
 from keras.optimizers import Adam
+from keras import regularizers
 
 from kgutil.models.keras.base import DefaultTrainSequence, DefaultTestSequence
 from kgutil.models.keras.rnn import KerasRNN, load_emb_matrix
@@ -283,6 +284,33 @@ def bigru_rcnn_2(
     model.compile(loss='binary_crossentropy', optimizer=Adam(lr=lr))
     return model
 
+
+def stack1(data, target_shape, l2=1e-3, shared=True):
+    model = Sequential()
+    model.add(InputLayer(name='numeric_columns__', input_shape=[len(data.numeric_columns)]))
+    model.add(Reshape([-1, 6]))
+    model.add(Permute((2, 1)))
+    if shared:
+        model.add(Conv1D(1, 1, kernel_regularizer=regularizers.l2(l2), kernel_initializer='zero', activation='sigmoid'))
+    else:
+        model.add(LocallyConnected1D(1, 1, kernel_regularizer=regularizers.l2(l2), kernel_initializer='zero', activation='sigmoid'))
+    model.add(Reshape([6]))
+    return model
+
+
+def stack2(data, target_shape, l2=1e-3, hid_size=16, shared=True):
+    model = Sequential()
+    model.add(InputLayer(name='numeric_columns__', input_shape=[len(data.numeric_columns)]))
+    model.add(Reshape([-1, 6]))
+    model.add(Permute((2, 1)))
+    if shared:
+        model.add(Conv1D(hid_size, 1, kernel_regularizer=regularizers.l2(l2), activation='relu'))
+        model.add(Conv1D(1, 1, kernel_regularizer=regularizers.l2(l2), kernel_initializer='zero', activation='sigmoid'))
+    else:
+        model.add(LocallyConnected1D(hid_size, 1, kernel_regularizer=regularizers.l2(l2), activation='relu'))
+        model.add(LocallyConnected1D(1, 1, kernel_regularizer=regularizers.l2(l2), kernel_initializer='zero', activation='sigmoid'))
+    model.add(Reshape([6]))
+    return model
 
 
 class MultiStep:
