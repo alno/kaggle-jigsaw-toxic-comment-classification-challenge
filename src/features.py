@@ -106,7 +106,7 @@ def apply_corrections(df, vectors):
         return corrs
 
     def correct_line(line):
-        if isinstance(line, float): # skip nan
+        if isinstance(line, float):  # skip nan
             return line
 
         words = re.findall(r'(?u)\b\w\w+\b', line)
@@ -368,3 +368,136 @@ def multilang_clean3(multilang):
 
 def multilang_clean3_corrected_fasttext(multilang_clean3):
     return apply_corrections(multilang_clean3, 'input/crawl-300d-2M.vec')
+
+
+def multilang_clean4(multilang):
+    url_pattern = re.compile(r"""(?i)\b((?:[hf][\w-]{2,3}:(?:/{1,3}|[a-z0-9%])|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))""")
+
+    expand_patterns = [
+        (r'US', 'United States'),
+        (r'IT', 'Information Technology'),
+        (r'wasn\'?t', 'was not'),
+        (r'you\'?re', 'you are'),
+        (r'won\'?t', 'will not'),
+        (r'can\'?t', 'can not'),
+        (r'i\'?m', 'i am'),
+        (r'ain\'?t', 'is not'),
+        (r'(\w+)\'ll', '\g<1> will'),
+        (r'(\w+)n\'t', '\g<1> not'),
+        (r'(\w+)\'ve', '\g<1> have'),
+        (r'(\w+)\'s', '\g<1> is'),
+        (r'(\w+)\'re', '\g<1> are'),
+        (r'(\w+)\'d', '\g<1> would'),
+        (r'\bf[*@$]+k', 'fuck'),
+        (r'\bsu?[*@$]+', 'suck'),
+        (r'\bf[*@$]+\b', 'fuck'),
+        (r'\bf[*@$]+i', 'fucki'),
+    ]
+
+    def clean(line):
+        if isinstance(line, float):  # skip nan
+            return line
+
+        line = unicodedata.normalize('NFKD', line.lower().replace('\xad', ''))  # normalize unicode
+        line = line.encode("ascii", errors="ignore").decode()  # remove non-ascii
+        line = re.sub(r'\b\w([^\w])\w(\1\w)+\b', lambda m: re.sub('\W', '', m.group()), line)
+
+        line = re.sub(r'[\s\n\t_]+', ' ', ' ' + line + ' ')  # replace sequence of spacing symbols with single space
+        line = re.sub(r'\[\d+\]', '', line)  # remove wiki references
+        line = re.sub(r'user:\w+', ' user ', line)  # replace user:username
+        line = line.replace('[talk]', ' ').replace('(talk)', ' ')
+
+        line = re.sub(url_pattern, ' url ', line)  # urls
+
+        line = re.sub(r'([0-9a-f]+:+)[0-9a-f]+', ' ', line)  # ipv6 addresses
+        line = re.sub(r'([0-9]+\.+){2,}[0-9]+', ' ', line)  # ipv4 addresses
+
+        line = re.sub(r'(\d)([^\d])', '\\1 \\2', line)  # split 5million
+        line = re.sub(r'([^\d])(\d)', '\\1 \\2', line)  # split wikipedia86
+        line = re.sub(r'\d+(\s+\d+)*', '0', line)  # replace big numerics with 00
+
+        line = re.sub(r'(.)\1{2,}', r'\1', line)  # replace identical consecutive characters
+
+        for pattern, repl in expand_patterns:
+            line = re.sub(pattern, repl, line)
+
+        return line
+
+    return multilang.applymap(clean)
+
+
+def apply_corrections2(df, vectors):
+    alphabet = string.ascii_lowercase
+    corrector_cache = {}
+
+    fasttext_voc = set(line.split()[0] for line in open(vectors))
+    clean_voc = Counter(w for line in df['comment_text'] for w in re.findall(r'(?u)\b\w\w*\b', line) if w in fasttext_voc)
+
+    def edits1(word):
+        splits = [(word[:i], word[i:]) for i in range(len(word) + 1)]
+        deletes = [a + b[1:] for a, b in splits if b]
+        transposes = [a + b[1] + b[0] + b[2:] for a, b in splits if len(b) > 1]
+        replaces = [a + c + b[1:] for a, b in splits for c in alphabet if b]
+        inserts = [a + c + b for a, b in splits for c in alphabet]
+        return (deletes + transposes + replaces + inserts)
+
+    def correct(word):
+        if word in clean_voc:
+            return [word]
+
+        corrs = corrector_cache.get(word)
+        if corrs is not None:
+            return corrs
+
+        if len(word) < 20:
+            corrs, corr_freq = None, 0
+            for cand in edits1(word):
+                cand_freq = clean_voc.get(cand, 0)
+                if cand_freq > corr_freq:
+                    corrs = [cand]
+                    corr_freq = cand_freq
+
+            if corrs is not None:
+                corrector_cache[word] = corrs
+                return corrs
+
+        if len(word) < 15:
+            for precand in edits1(word):
+                for cand in edits1(precand):
+                    cand_freq = clean_voc.get(cand, 0)
+                    if cand_freq > corr_freq:
+                        corrs = [cand]
+                        corr_freq = cand_freq
+
+            if corrs is not None:
+                corrector_cache[word] = corrs
+                return corrs
+
+        if len(word) > 4 and len(word) < 50:
+            for sz in reversed(range(1, min(len(word) - 1, 10))):
+                if clean_voc.get(word[:sz], 0) > 100:
+                    corrs = [word[:sz]] + correct(word[sz:])
+                    corrector_cache[word] = corrs
+                    return corrs
+
+        if len(word) > 20:
+            corrector_cache[word] = []
+            return []
+
+        corrs = [word]
+        corrector_cache[word] = corrs
+        return corrs
+
+    def correct_line(line):
+        if isinstance(line, float):  # skip nan
+            return line
+
+        words = re.findall(r'(?u)\b\w\w*\b', line)
+        words = [sw for w in words for sw in correct(w)]
+        return ' '.join(words)
+
+    return df.applymap(correct_line)
+
+
+def multilang_clean4_corrected_fasttext(multilang_clean4):
+    return apply_corrections2(multilang_clean4, 'input/crawl-300d-2M.vec')
