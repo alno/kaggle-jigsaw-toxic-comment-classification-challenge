@@ -6,6 +6,9 @@ from keras import regularizers
 from kgutil.models.keras.base import DefaultTrainSequence, DefaultTestSequence
 from kgutil.models.keras.rnn import KerasRNN, load_emb_matrix
 
+from copy import deepcopy
+import inspect
+
 
 def cudnn_lstm_1(
     data, target_shape,
@@ -138,7 +141,7 @@ def bigru_2(
 def bigru_cnn_1(
     data, target_shape,
     lr=1e-3,
-    rnn_size=128, rnn_dropout=None,
+    rnn_size=128, rnn_dropout=None, rnn_layers=1,
     conv_size=64,
     out_dropout=None,
     text_emb_dropout=0.2, text_emb_size=32, text_emb_file=None, text_emb_trainable=False, text_emb_rand_std=None
@@ -152,13 +155,14 @@ def bigru_cnn_1(
 
     inputs = [text_inp]
 
-    emb = Embedding(data.text_voc_size, text_emb_size, weights=emb_weights, trainable=text_emb_trainable)(text_inp)
-    emb = SpatialDropout1D(text_emb_dropout)(emb)
+    seq = Embedding(data.text_voc_size, text_emb_size, weights=emb_weights, trainable=text_emb_trainable)(text_inp)
+    seq = SpatialDropout1D(text_emb_dropout)(seq)
 
-    seq = Bidirectional(CuDNNGRU(rnn_size, return_sequences=True))(emb)
-    if rnn_dropout is not None:
-        seq = SpatialDropout1D(rnn_dropout)(seq)
-    seq = Conv1D(conv_size, kernel_size = 2, padding = "valid", kernel_initializer = "he_uniform")(seq)
+    for _ in range(rnn_layers):
+        seq = Bidirectional(CuDNNGRU(rnn_size, return_sequences=True))(seq)
+        if rnn_dropout is not None:
+            seq = SpatialDropout1D(rnn_dropout)(seq)
+    seq = Conv1D(conv_size, kernel_size=2, padding="valid", kernel_initializer="he_uniform")(seq)
 
     out = concatenate([GlobalMaxPool1D()(seq), GlobalAveragePooling1D()(seq)])
 
@@ -313,20 +317,41 @@ def stack2(data, target_shape, l2=1e-3, hid_size=16, shared=True):
     return model
 
 
-class MultiStep:
+class AugTrainSequence(DefaultTrainSequence):
 
-    def __init__(self, steps):
-        self.steps = steps
+    def __init__(self, augmentations=[], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.augmentations = [deepcopy(aug) for aug in augmentations]
+        for aug in self.augmentations:
+            if hasattr(aug, 'fit'):
+                aug.fit(self.X, self.y)
 
-    def transform(self, X):
-        for step in self.steps:
-            X = step.transform(X)
-        return X
+    def _transform_batch(self, batch_x, batch_y):
+        for aug in self.augmentations:
+            if 'y' in inspect.getargspec(aug.transform).args:
+                batch_x, batch_y = aug.transform(batch_x, batch_y)
+            else:
+                batch_x = aug.transform(batch_x)
+
+        return super()._transform_batch(batch_x, batch_y)
+
+
+class AugTestSequence(DefaultTestSequence):
+
+    def __init__(self, augmentations=[], *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.augmentations = augmentations
+
+    def _transform_batch(self, batch_x):
+        for aug in self.augmentations:
+            batch_x = aug.transform(batch_x)
+        return super()._transform_batch(batch_x)
 
 
 class AugmentedModel(KerasRNN):
 
-    def __init__(self,
+    def __init__(
+        self,
         _sentinel=None,
         train_augmentations=[], predict_augmentations=[],
         **kwargs
@@ -337,11 +362,13 @@ class AugmentedModel(KerasRNN):
         self.predict_augmentations = predict_augmentations
 
     def _build_train_sequence(self, X, y, batch_size):
-        return DefaultTrainSequence(
-            MultiStep(self.train_augmentations + [self.data_transformer]),
-            self.target_transformer, X, y, batch_size)
+        return AugTrainSequence(
+            data_transformer=self.data_transformer, target_transformer=self.target_transformer,
+            X=X, y=y, batch_size=batch_size,
+            augmentations=self.train_augmentations)
 
     def _build_test_sequence(self, X, batch_size):
-        return DefaultTestSequence(
-            MultiStep(self.predict_augmentations + [self.data_transformer]),
-            X, batch_size)
+        return AugTestSequence(
+            data_transformer=self.data_transformer,
+            X=X, batch_size=batch_size,
+            augmentations=self.predict_augmentations)
