@@ -501,3 +501,41 @@ def apply_corrections2(df, vectors):
 
 def multilang_clean4_corrected_fasttext(multilang_clean4):
     return apply_corrections2(multilang_clean4, 'input/crawl-300d-2M.vec')
+
+
+def multilang_clean4_bpe50k(multilang_clean4):
+    import sentencepiece as spm
+
+    sp = spm.SentencePieceProcessor()
+    sp.Load("input/en.wiki.bpe.op50000.model")
+
+    def apply_bpe(line):
+        if isinstance(line, float):  # skip nan
+            return line
+
+        line = re.sub(r'\s+', ' ', line).lower().strip()
+        return ' '.join(sp.EncodeAsPieces(line))
+
+    return multilang_clean4.applymap(apply_bpe)
+
+
+def multilang_clean4_bpe25k(multilang_clean4):
+    import sentencepiece as spm
+
+    sp = spm.SentencePieceProcessor()
+    sp.Load("input/en.wiki.bpe.op25000.model")
+
+    def apply_bpe(line):
+        if isinstance(line, float):  # skip nan
+            return line
+
+        line = re.sub(r'\s+', ' ', line).lower().strip()
+        return ' '.join(sp.EncodeAsPieces(line))
+
+    return multilang_clean4.applymap(apply_bpe)
+
+
+def atanas(raw):
+    tr = pd.read_csv('input/train_atanas.csv', index_col='id')[['comment_text']]
+    te = pd.read_csv('input/test_atanas.csv', index_col='id')
+    return pd.concat([tr, te]).fillna('').loc[raw.index]

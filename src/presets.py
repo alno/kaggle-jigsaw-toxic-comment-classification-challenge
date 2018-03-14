@@ -7,12 +7,13 @@ from sklearn.metrics import roc_auc_score
 from scipy.special import expit
 
 from src.util.estimators import MultiProba, SimpleAverage, WeightedAverage, OnExtendedData
-from src.util.preprocessors import OnColumn, DropColumns
+from src.util.preprocessors import OnColumn, DropColumns, AvgGroupsColumns
 from src.meta import input_file
-from src import augmentations
+from src import augmentations, meta
 
 import src.models.keras as keras_models
 import src.models.tensorflow as tf_models
+import src.models.boosting as boost_models
 
 import lightgbm as lgb
 
@@ -265,6 +266,76 @@ def lr4():
             DropColumns(['comment_text']),
         ),
         MultiProba(LogisticRegression())
+    )
+
+
+def lgb_tst():
+    return make_pipeline(
+        OnColumn('comment_text', make_union(
+            TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='word',
+                token_pattern=r'\w{1,}',
+                stop_words='english',
+                ngram_range=(1, 1),
+                max_features=100),
+            TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='char',
+                stop_words='english',
+                ngram_range=(2, 6),
+                max_features=500)
+        )),
+        boost_models.LgbOnKBestModel()
+    )
+
+
+def lgb1():
+    return make_pipeline(
+        OnColumn('comment_text', make_union(
+            TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='word',
+                token_pattern=r'\w{1,}',
+                stop_words='english',
+                ngram_range=(1, 1),
+                max_features=50000),
+            TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='char',
+                stop_words='english',
+                ngram_range=(2, 6),
+                max_features=50000)
+        )),
+        boost_models.LgbOnKBestModel()
+    )
+
+
+@features('atanas')
+def lgb2():
+    return make_pipeline(
+        OnColumn('comment_text', make_union(
+            TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='word',
+                token_pattern=r'\w{1,}',
+                stop_words='english',
+                ngram_range=(1, 1),
+                max_features=50000),
+            TfidfVectorizer(
+                sublinear_tf=True,
+                strip_accents='unicode',
+                analyzer='char',
+                stop_words='english',
+                ngram_range=(2, 6),
+                max_features=50000)
+        )),
+        boost_models.LgbOnKBestModel()
     )
 
 
@@ -1062,6 +1133,44 @@ def bigru_cnn_6_aug6():
     )
 
 
+@features('multilang_clean4_bpe50k', 'num1', 'num2', 'ind1', 'sentiment1')
+def bigru_cnn_6_bpe50k_aug6():
+    return keras_models.AugmentedModel(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=4, batch_size=1024), dict(num_epochs=10, batch_size=2048)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post', ignore_columns=['comment_text__de', 'comment_text__fr', 'comment_text__es'],
+        num_text_words=100000, max_text_len=200,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=80, rnn_dropout=0.3, out_dropout=0.2, rnn_layers=2,
+            text_emb_size=300, text_emb_file=input_file('en.wiki.bpe.op50000.d300.w2v.txt'), text_emb_dropout=0.45, text_emb_rand_std=0.3
+        ),
+        train_augmentations=[augmentations.RandomTranslation(0.35), augmentations.RandomConcat(0.05)],
+    )
+
+
+@features('atanas', 'num1', 'num2', 'ind1', 'sentiment1')
+def bigru_cnn_6_atanas_aug6():
+    return keras_models.AugmentedModel(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=4, batch_size=1024), dict(num_epochs=10, batch_size=2048)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post', ignore_columns=['comment_text__de', 'comment_text__fr', 'comment_text__es'],
+        num_text_words=100000, max_text_len=200,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=64, rnn_dropout=0.3, out_dropout=0.2, rnn_layers=2,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.45, text_emb_rand_std=0.3
+        ),
+        train_augmentations=[augmentations.RandomConcat(0.05)],
+    )
+
+
 # L2
 
 
@@ -1369,4 +1478,80 @@ def l2_avg15():
     return make_pipeline(
         DropColumns(['comment_text']),
         SimpleAverage(),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'bigru_sterby_4_bpe50k', 'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+
+)
+def l2_avg16():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'bigru_sterby_4_bpe50k', 'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+)
+def l2_lgb_group_tst():
+    return make_pipeline(
+        AvgGroupsColumns(columns=meta.target_columns, groups=[
+            ('lr', ['lr2', 'lr3', 'lr3_cl2']),
+            ('bpe', ['bigru_sterby_4_bpe50k']),
+            ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+            ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+            ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3']),
+            ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6']),
+            ('g4', ['bigru_cnn_4', 'bigru_sterby_5', 'bigru_sterby_2_num_sent_longer_rand']),
+        ]),
+        MultiProba(lgb.LGBMClassifier(
+            max_depth=3, metric="auc",
+            n_estimators=250, num_leaves=10, boosting_type="gbdt",
+            learning_rate=0.05, feature_fraction=0.45, colsample_bytree=0.45,
+            bagging_fraction=0.8, bagging_freq=5,
+            reg_lambda=0.2
+        )))
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'bigru_sterby_4_bpe50k', 'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+)
+def l2_group_avg_tst():
+    return make_pipeline(
+        AvgGroupsColumns(columns=meta.target_columns, groups=[
+            ('lr', ['lr2', 'lr3', 'lr3_cl2']),
+            ('bpe', ['bigru_sterby_4_bpe50k']),
+            ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+            ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+            ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3']),
+            ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6']),
+            ('g4', ['bigru_cnn_4', 'bigru_sterby_5', 'bigru_sterby_2_num_sent_longer_rand']),
+        ]),
+        SimpleAverage())
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2',
+    'cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4', 'bigru_gmp_1', 'bigru_sterby_2',
+    'bigru_sterby_2_num', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_4_bpe50k',
+    'bigru_cnn_3', 'bigru_cnn_4', 'bigru_sterby_5',
+    'bigru_rcnn_4', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2',
+    'bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_rcnn_1', 'bigru_rcnn_3',
+    'bigru_cnn_4_aug4', 'bigru_cnn_5_aug4', 'bigru_sterby_3_num_aug4',
+    'bigru_cnn_4_aug6', 'bigru_cnn_6_aug6',
+)
+def l2_ker_tst():
+    return KerasRNN(
+        num_epochs=150, batch_size=2000, external_metrics=dict(roc_auc=roc_auc_score),
+        ignore_columns=['comment_text'],
+        compile_opts=dict(loss='binary_crossentropy', optimizer='adam'),
+        model_fn=keras_models.stack2,
+        model_opts=dict(
+            l2=1e-6, shared=False
+        )
     )
