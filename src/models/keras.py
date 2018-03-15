@@ -1,5 +1,5 @@
 from keras.models import Sequential, Model
-from keras.layers import InputLayer, Input, Embedding, Dense, Dropout, Bidirectional, GlobalMaxPool1D, GlobalAveragePooling1D, SpatialDropout1D, Conv1D, CuDNNLSTM, CuDNNGRU, TimeDistributed, Reshape, Permute, LocallyConnected1D, concatenate
+from keras.layers import InputLayer, Input, Embedding, Dense, Dropout, Bidirectional, GlobalMaxPool1D, GlobalAveragePooling1D, SpatialDropout1D, Conv1D, CuDNNLSTM, CuDNNGRU, TimeDistributed, Reshape, Permute, LocallyConnected1D, concatenate, ELU, Activation
 from keras.optimizers import Adam
 from keras import regularizers
 
@@ -138,11 +138,23 @@ def bigru_2(
     return model
 
 
+def activation(act, x):
+    if act == 'relu':
+        return Activation('relu')(x)
+    elif act == 'elu':
+        return ELU()(x)
+    elif act is None:
+        return x
+    else:
+        raise RuntimeError("Unknown activation %r" % act)
+
+
 def bigru_cnn_1(
     data, target_shape,
     lr=1e-3,
     rnn_size=128, rnn_dropout=None, rnn_layers=1,
-    conv_size=64,
+    conv_size=64, conv_activation=None,
+    num_layers=[], num_activation='relu', num_dropout=None,
     out_dropout=None,
     text_emb_dropout=0.2, text_emb_size=32, text_emb_file=None, text_emb_trainable=False, text_emb_rand_std=None
 ):
@@ -163,13 +175,21 @@ def bigru_cnn_1(
         if rnn_dropout is not None:
             seq = SpatialDropout1D(rnn_dropout)(seq)
     seq = Conv1D(conv_size, kernel_size=2, padding="valid", kernel_initializer="he_uniform")(seq)
-
+    seq = activation(conv_activation, seq)
     out = concatenate([GlobalMaxPool1D()(seq), GlobalAveragePooling1D()(seq)])
 
     if len(data.numeric_columns) > 0:
         num_inp = Input(shape=[len(data.numeric_columns)], name="numeric_columns__")
         inputs.append(num_inp)
-        out = concatenate([out, num_inp])
+
+        num = num_inp
+        for num_layer_size in num_layers:
+            if num_dropout is not None:
+                num = Dropout(num_dropout)(num)
+            num = Dense(num_layer_size, activation=None)(num)
+            num = activation(num_activation, num)
+
+        out = concatenate([out, num])
 
     if out_dropout is not None:
         out = Dropout(out_dropout)(out)

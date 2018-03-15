@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 
 class LgbOnKBestModel:
 
-    params = {
+    default_params = {
         'learning_rate': 0.2,
         'application': 'binary',
         'num_leaves': 31,
@@ -22,7 +22,7 @@ class LgbOnKBestModel:
         'lambda_l2': 1
     }
 
-    rounds = {
+    default_rounds = {
         'toxic': 140,
         'severe_toxic': 50,
         'obscene': 80,
@@ -30,6 +30,11 @@ class LgbOnKBestModel:
         'insult': 70,
         'identity_hate': 80
     }
+
+    def __init__(self, params={}, rounds={}, feature_threshold=0.2):
+        self.params = {**self.default_params, **params}
+        self.rounds = {**self.default_rounds, **rounds}
+        self.feature_threshold = feature_threshold
 
     def fit(self, train_X, train_y):
         self.label_columns = list(train_y.columns)
@@ -39,7 +44,7 @@ class LgbOnKBestModel:
         for label in self.label_columns:
             label_y = train_y[label]
 
-            self.label_transformers[label] = SelectFromModel(LogisticRegression(solver='sag'), threshold=0.2)
+            self.label_transformers[label] = SelectFromModel(LogisticRegression(solver='sag'), threshold=self.feature_threshold)
             label_train_X = self.label_transformers[label].fit_transform(train_X, label_y)
 
             label_train_X, label_valid_X, label_train_y, label_valid_y = train_test_split(label_train_X, label_y, test_size=0.05, random_state=144)

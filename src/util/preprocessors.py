@@ -34,6 +34,21 @@ class DropColumns(BaseEstimator):
         return X.drop(self.columns, axis=1)
 
 
+class SelectColumns(BaseEstimator):
+
+    def __init__(self, columns):
+        self.columns = columns
+
+    def fit(self, X, y=None):
+        return self
+
+    def fit_transform(self, X, y=None):
+        return self.transform(X)
+
+    def transform(self, X):
+        return X[self.columns]
+
+
 class AvgGroupsColumns(BaseEstimator):
 
     def __init__(self, groups, columns):
