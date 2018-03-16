@@ -503,6 +503,10 @@ def multilang_clean4_corrected_fasttext(multilang_clean4):
     return apply_corrections2(multilang_clean4, 'input/crawl-300d-2M.vec')
 
 
+def multilang_clean4_corrected_twitter(multilang_clean4):
+    return apply_corrections2(multilang_clean4, 'input/glove.twitter.27B.200d.txt')
+
+
 def multilang_clean4_bpe50k(multilang_clean4):
     import sentencepiece as spm
 

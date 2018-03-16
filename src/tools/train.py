@@ -33,6 +33,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('preset')
     parser.add_argument('--fold', type=int)
+    parser.add_argument('--skip-save', action='store_true')
     parser.add_argument('--force', action='store_true')
 
     args = parser.parse_args()
@@ -95,10 +96,11 @@ def main():
                 fold_model.fit(fold_train_X, fold_train_y)
 
             # Save model
-            if hasattr(fold_model, 'save'):
-                fold_model.save(fold_cache.model_file)
-            else:
-                save_pickle(fold_cache.model_file + '.pickle', fold_model)
+            if not args.skip_save:
+                if hasattr(fold_model, 'save'):
+                    fold_model.save(fold_cache.model_file)
+                else:
+                    save_pickle(fold_cache.model_file + '.pickle', fold_model)
 
             # Make and save predictions
             fold_val_p = pd.DataFrame(fold_model.predict(fold_val_X), columns=meta.target_columns, index=fold_val_X.index)

@@ -6,6 +6,8 @@ import re
 from sklearn.multioutput import MultiOutputClassifier
 from sklearn.utils import resample
 
+from copy import deepcopy
+
 
 class MultiProba(MultiOutputClassifier):
 
@@ -79,3 +81,46 @@ class OnExtendedData:
         generated_y = ((left_y.reset_index(drop=True) + right_y.reset_index(drop=True)) * self.decay).clip(upper=1)
 
         return pd.concat((train_X, generated_X)), pd.concat((train_y, generated_y))
+
+
+class Pipeline:
+
+    def __init__(self, *steps):
+        self.steps = steps
+
+    def fit_eval(self, train_X, train_y, eval_X, eval_y):
+        for step in self.steps[:-1]:
+            if hasattr(step, 'fit_transform'):
+                train_X = step.fit_transform(train_X)
+            else:
+                train_X = step.transform(train_X)
+
+            eval_X = step.transform(eval_X)
+
+        return self.steps[-1].fit_eval(train_X, train_y, eval_X, eval_y)
+
+    def predict(self, X):
+        for step in self.steps[:-1]:
+            X = step.transform(X)
+
+        return self.steps[-1].predict(X)
+
+
+class Bagged:
+
+    def __init__(self, n, model, sample_size=1.0, sample_replace=True):
+        self.n = n
+        self.sample_size = sample_size
+        self.sample_replace = sample_replace
+        self.model = model
+
+    def fit_eval(self, train_X, train_y, eval_X, eval_y):
+        self.fitted_models = []
+        for i in range(self.n):
+            bag_train_X, bag_train_y = resample(train_X, train_y, n_samples=int(self.sample_size * len(train_X)), replace=self.sample_replace)
+            model = deepcopy(self.model)
+            model.fit_eval(bag_train_X, bag_train_y, eval_X, eval_y)
+            self.fitted_models.append(model)
+
+    def predict(self, X):
+        return sum(m.predict(X) for m in self.fitted_models) / len(self.fitted_models)

@@ -1,5 +1,5 @@
 from keras.models import Sequential, Model
-from keras.layers import InputLayer, Input, Embedding, Dense, Dropout, Bidirectional, GlobalMaxPool1D, GlobalAveragePooling1D, SpatialDropout1D, Conv1D, CuDNNLSTM, CuDNNGRU, TimeDistributed, Reshape, Permute, LocallyConnected1D, concatenate, ELU, Activation
+from keras.layers import InputLayer, Input, Embedding, Dense, Dropout, Bidirectional, GlobalMaxPool1D, GlobalAveragePooling1D, SpatialDropout1D, Conv1D, CuDNNLSTM, CuDNNGRU, TimeDistributed, Reshape, Permute, LocallyConnected1D, concatenate, ELU, Activation, add, Lambda
 from keras.optimizers import Adam
 from keras import regularizers
 
@@ -155,6 +155,7 @@ def bigru_cnn_1(
     rnn_size=128, rnn_dropout=None, rnn_layers=1,
     conv_size=64, conv_activation=None,
     num_layers=[], num_activation='relu', num_dropout=None,
+    mlp_layers=[], mlp_activation='relu', mlp_dropout=None,
     out_dropout=None,
     text_emb_dropout=0.2, text_emb_size=32, text_emb_file=None, text_emb_trainable=False, text_emb_rand_std=None
 ):
@@ -182,18 +183,26 @@ def bigru_cnn_1(
         num_inp = Input(shape=[len(data.numeric_columns)], name="numeric_columns__")
         inputs.append(num_inp)
 
+        # Num MLP
         num = num_inp
-        for num_layer_size in num_layers:
+        for layer_size in num_layers:
             if num_dropout is not None:
                 num = Dropout(num_dropout)(num)
-            num = Dense(num_layer_size, activation=None)(num)
+            num = Dense(layer_size, activation=None)(num)
             num = activation(num_activation, num)
 
         out = concatenate([out, num])
 
+    # MLP
+    for layer_size in mlp_layers:
+        if mlp_dropout is not None:
+            out = Dropout(mlp_dropout)(out)
+        out = Dense(layer_size, activation=None)(out)
+        out = activation(mlp_activation, out)
+
+    # Output
     if out_dropout is not None:
         out = Dropout(out_dropout)(out)
-
     out = Dense(6, activation='sigmoid')(out)
 
     # Model
@@ -322,19 +331,54 @@ def stack1(data, target_shape, l2=1e-3, shared=True):
     return model
 
 
-def stack2(data, target_shape, l2=1e-3, hid_size=16, shared=True):
+def stack2(data, target_shape, l2=1e-3, hid_size=16, hid_dropout=None, shared=True):
     model = Sequential()
     model.add(InputLayer(name='numeric_columns__', input_shape=[len(data.numeric_columns)]))
     model.add(Reshape([-1, 6]))
     model.add(Permute((2, 1)))
     if shared:
         model.add(Conv1D(hid_size, 1, kernel_regularizer=regularizers.l2(l2), activation='relu'))
-        model.add(Conv1D(1, 1, kernel_regularizer=regularizers.l2(l2), kernel_initializer='zero', activation='sigmoid'))
+        if hid_dropout is not None:
+            model.add(Dropout(hid_dropout))
+        model.add(Conv1D(1, 1, kernel_regularizer=regularizers.l2(l2), activation='sigmoid'))
     else:
         model.add(LocallyConnected1D(hid_size, 1, kernel_regularizer=regularizers.l2(l2), activation='relu'))
-        model.add(LocallyConnected1D(1, 1, kernel_regularizer=regularizers.l2(l2), kernel_initializer='zero', activation='sigmoid'))
+        if hid_dropout is not None:
+            model.add(Dropout(hid_dropout))
+        model.add(LocallyConnected1D(1, 1, kernel_regularizer=regularizers.l2(l2), activation='sigmoid'))
     model.add(Reshape([6]))
     return model
+
+
+def stack3(data, target_shape, l2=1e-3, hid_dropout=None, hid_size=16, shared=True):
+    inp = Input(name='numeric_columns__', shape=[len(data.numeric_columns)])
+
+    x = Reshape([-1, 6])(inp)
+    c0 = GlobalAveragePooling1D()(x)
+
+    x = Permute((2, 1))(x)
+    if shared:
+        c1 = Conv1D(1, 1, kernel_regularizer=regularizers.l2(l2), activation='sigmoid')(x)
+    else:
+        c1 = LocallyConnected1D(1, 1, kernel_regularizer=regularizers.l2(l2), activation='sigmoid')(x)
+
+    if shared:
+        c2 = Conv1D(hid_size, 1, kernel_regularizer=regularizers.l2(l2), activation='elu')(x)
+        if hid_dropout is not None:
+            c2 = Dropout(hid_dropout)(c2)
+        c2 = Conv1D(1, 1, kernel_regularizer=regularizers.l2(l2), activation='sigmoid')(c2)
+    else:
+        c2 = LocallyConnected1D(hid_size, 1, kernel_regularizer=regularizers.l2(l2), activation='elu')(x)
+        if hid_dropout is not None:
+            c2 = Dropout(hid_dropout)(c2)
+        c2 = LocallyConnected1D(1, 1, kernel_regularizer=regularizers.l2(l2), activation='sigmoid')(c2)
+
+    c0 = Reshape([6])(c0)
+    c1 = Reshape([6])(c1)
+    c2 = Reshape([6])(c2)
+    out = Lambda(lambda x: x/3)(add([c0, c1, c2]))
+
+    return Model(inp, out)
 
 
 class AugTrainSequence(DefaultTrainSequence):
