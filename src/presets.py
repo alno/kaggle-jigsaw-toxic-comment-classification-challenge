@@ -1347,6 +1347,24 @@ def bigru_cnn_9_aug6_twitter2():
         train_augmentations=[augmentations.RandomTranslation(0.35), augmentations.RandomConcat(0.05)],
     )
 
+
+@features('multilang_clean4_corrected_fasttext', 'num1', 'num2', 'ind1', 'sentiment1')
+def bigru_dpcnn_aug6():
+    return keras_models.AugmentedModel(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=4, batch_size=1024), dict(num_epochs=15, batch_size=2048)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post', ignore_columns=['comment_text__de', 'comment_text__fr', 'comment_text__es'],
+        num_text_words=100000, max_text_len=200,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.dpcnn,
+        model_opts=dict(
+            lr=1e-3,
+            text_emb_size=300, text_emb_file=input_file('crawl-300d-2M.vec'), text_emb_dropout=0.45, text_emb_rand_std=0.3
+        ),
+        train_augmentations=[augmentations.RandomTranslation(0.35), augmentations.RandomConcat(0.05)],
+    )
+
 # L2
 
 
@@ -1906,3 +1924,17 @@ def l2_group_ker21():
                 l2=1e-3, shared=False, hid_size=16,
             )
         ))
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6', 'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_sterby_2_aug6'
+)
+def l2_avg22():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )

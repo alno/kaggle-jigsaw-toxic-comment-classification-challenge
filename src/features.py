@@ -539,6 +539,22 @@ def multilang_clean4_bpe25k(multilang_clean4):
     return multilang_clean4.applymap(apply_bpe)
 
 
+def multilang_clean4_bpe10k(multilang_clean4):
+    import sentencepiece as spm
+
+    sp = spm.SentencePieceProcessor()
+    sp.Load("input/en.wiki.bpe.op10000.model")
+
+    def apply_bpe(line):
+        if isinstance(line, float):  # skip nan
+            return line
+
+        line = re.sub(r'\s+', ' ', line).lower().strip()
+        return ' '.join(sp.EncodeAsPieces(line))
+
+    return multilang_clean4.applymap(apply_bpe)
+
+
 def atanas(raw):
     tr = pd.read_csv('input/train_atanas.csv', index_col='id')[['comment_text']]
     te = pd.read_csv('input/test_atanas.csv', index_col='id')

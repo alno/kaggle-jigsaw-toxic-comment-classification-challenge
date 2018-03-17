@@ -1,5 +1,5 @@
 from keras.models import Sequential, Model
-from keras.layers import InputLayer, Input, Embedding, Dense, Dropout, Bidirectional, GlobalMaxPool1D, GlobalAveragePooling1D, SpatialDropout1D, Conv1D, CuDNNLSTM, CuDNNGRU, TimeDistributed, Reshape, Permute, LocallyConnected1D, concatenate, ELU, Activation, add, Lambda
+from keras.layers import InputLayer, Input, Embedding, Dense, Dropout, Bidirectional, GlobalMaxPool1D, GlobalAveragePooling1D, SpatialDropout1D, Conv1D, CuDNNLSTM, CuDNNGRU, TimeDistributed, Reshape, Permute, LocallyConnected1D, concatenate, ELU, Activation, add, Lambda, BatchNormalization, PReLU, MaxPooling1D, GlobalMaxPooling1D
 from keras.optimizers import Adam
 from keras import regularizers
 
@@ -314,6 +314,119 @@ def bigru_rcnn_2(
 
     # Model
     model = Model(inputs, out)
+    model.compile(loss='binary_crossentropy', optimizer=Adam(lr=lr))
+    return model
+
+
+def dpcnn(
+    data, target_shape,
+    filter_nr=64,
+    filter_size=3,
+    max_pool_size=3,
+    max_pool_strides=2,
+    dense_nr=256,
+    spatial_dropout=0.2,
+    dense_dropout=0.5,
+    lr=1e-3,
+    text_emb_dropout=0.2, text_emb_size=32, text_emb_file=None, text_emb_trainable=False, text_emb_rand_std=None
+):
+    if text_emb_file is not None:
+        emb_weights = [load_emb_matrix(text_emb_file, data.text_tokenizer.word_index, data.text_voc_size, text_emb_size, rand_std=text_emb_rand_std)]
+    else:
+        emb_weights = None
+
+    text_inp = Input(shape=[data.max_text_len], name='comment_text')
+    inputs = [text_inp]
+
+    emb = Embedding(data.text_voc_size, text_emb_size, weights=emb_weights, trainable=text_emb_trainable)(text_inp)
+    emb = SpatialDropout1D(text_emb_dropout)(emb)
+
+    conv_kern_reg = regularizers.l2(0.00001)
+    conv_bias_reg = regularizers.l2(0.00001)
+
+    block1 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(emb)
+    block1 = BatchNormalization()(block1)
+    block1 = PReLU()(block1)
+    block1 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block1)
+    block1 = BatchNormalization()(block1)
+    block1 = PReLU()(block1)
+
+    #we pass embedded comment through conv1d with filter size 1 because it needs to have the same shape as block output
+    #if you choose filter_nr = embed_size (300 in this case) you don't have to do this part and can add emb_comment directly to block1_output
+    resize_emb = Conv1D(filter_nr, kernel_size=1, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(emb)
+    resize_emb = PReLU()(resize_emb)
+
+    block1_output = add([block1, resize_emb])
+    block1_output = MaxPooling1D(pool_size=max_pool_size, strides=max_pool_strides)(block1_output)
+
+    block2 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block1_output)
+    block2 = BatchNormalization()(block2)
+    block2 = PReLU()(block2)
+    block2 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block2)
+    block2 = BatchNormalization()(block2)
+    block2 = PReLU()(block2)
+
+    block2_output = add([block2, block1_output])
+    block2_output = MaxPooling1D(pool_size=max_pool_size, strides=max_pool_strides)(block2_output)
+
+    block3 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block2_output)
+    block3 = BatchNormalization()(block3)
+    block3 = PReLU()(block3)
+    block3 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block3)
+    block3 = BatchNormalization()(block3)
+    block3 = PReLU()(block3)
+
+    block3_output = add([block3, block2_output])
+    block3_output = MaxPooling1D(pool_size=max_pool_size, strides=max_pool_strides)(block3_output)
+
+    block4 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block3_output)
+    block4 = BatchNormalization()(block4)
+    block4 = PReLU()(block4)
+    block4 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block4)
+    block4 = BatchNormalization()(block4)
+    block4 = PReLU()(block4)
+
+    block4_output = add([block4, block3_output])
+    block4_output = MaxPooling1D(pool_size=max_pool_size, strides=max_pool_strides)(block4_output)
+
+    block5 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block4_output)
+    block5 = BatchNormalization()(block5)
+    block5 = PReLU()(block5)
+    block5 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block5)
+    block5 = BatchNormalization()(block5)
+    block5 = PReLU()(block5)
+
+    block5_output = add([block5, block4_output])
+    block5_output = MaxPooling1D(pool_size=max_pool_size, strides=max_pool_strides)(block5_output)
+
+    block6 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block5_output)
+    block6 = BatchNormalization()(block6)
+    block6 = PReLU()(block6)
+    block6 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block6)
+    block6 = BatchNormalization()(block6)
+    block6 = PReLU()(block6)
+
+    block6_output = add([block6, block5_output])
+    block6_output = MaxPooling1D(pool_size=max_pool_size, strides=max_pool_strides)(block6_output)
+
+    block7 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block6_output)
+    block7 = BatchNormalization()(block7)
+    block7 = PReLU()(block7)
+    block7 = Conv1D(filter_nr, kernel_size=filter_size, padding='same', activation='linear', kernel_regularizer=conv_kern_reg, bias_regularizer=conv_bias_reg)(block7)
+    block7 = BatchNormalization()(block7)
+    block7 = PReLU()(block7)
+
+    block7_output = add([block7, block6_output])
+    output = GlobalMaxPooling1D()(block7_output)
+
+    output = Dense(dense_nr, activation='linear')(output)
+    output = BatchNormalization()(output)
+    output = PReLU()(output)
+    output = Dropout(dense_dropout)(output)
+    output = Dense(6, activation='sigmoid')(output)
+
+    # Model
+    model = Model(inputs, output)
     model.compile(loss='binary_crossentropy', optimizer=Adam(lr=lr))
     return model
 
