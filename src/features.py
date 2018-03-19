@@ -559,3 +559,10 @@ def atanas(raw):
     tr = pd.read_csv('input/train_atanas.csv', index_col='id')[['comment_text']]
     te = pd.read_csv('input/test_atanas.csv', index_col='id')
     return pd.concat([tr, te]).fillna('').loc[raw.index]
+
+
+def api1(raw):
+    data = pd.concat((pd.read_csv('input/meta_train_from_api.csv'), pd.read_csv('input/meta_test_from_api.csv')))
+    data.drop(['text'], axis=1, inplace=True)
+
+    return pd.DataFrame(data.values, columns=data.columns, index=raw.index)
