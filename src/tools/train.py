@@ -35,6 +35,7 @@ def main():
     parser.add_argument('--fold', type=int)
     parser.add_argument('--skip-save', action='store_true')
     parser.add_argument('--force', action='store_true')
+    parser.add_argument('--dump-features-to', type=str)
 
     args = parser.parse_args()
 
@@ -108,6 +109,17 @@ def main():
 
             fold_test_p = pd.DataFrame(fold_model.predict(fold_test_X), columns=meta.target_columns, index=fold_test_X.index)
             fold_test_p.to_pickle(fold_cache.test_preds_file)
+
+            # Dump train/val/test features
+            if args.dump_features_to is not None:
+                dump_dir = os.path.join(args.dump_features_to, 'fold-%d' % fold)
+                if os.path.exists(dump_dir):
+                    shutil.rmtree(dump_dir)
+                os.makedirs(dump_dir)
+
+                pd.concat((fold_model.build_features(fold_train_X), fold_train_y), axis=1).to_pickle(os.path.join(dump_dir, 'train.pickle'), protocol=2)
+                pd.concat((fold_model.build_features(fold_val_X), fold_val_y), axis=1).to_pickle(os.path.join(dump_dir, 'val.pickle'), protocol=2)
+                fold_model.build_features(fold_test_X).to_pickle(os.path.join(dump_dir, 'test.pickle'), protocol=2)
 
         scores.iloc[fold] = roc_auc_score(fold_val_y, fold_val_p, average=None)
 

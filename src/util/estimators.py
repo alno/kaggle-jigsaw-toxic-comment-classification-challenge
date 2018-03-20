@@ -32,14 +32,14 @@ class SimpleAverage:
 class WeightedAverage:
 
     def __init__(self, weights, renorm=False):
-        self.weights = np.asarray(weights) / sum(weights) if renorm else weights
+        self.weights = np.asarray(weights) / sum(weights) if renorm else np.asarray(weights)
 
     def fit(self, X, y):
-        assert X.shape[1] == len(self.weights) * 6
+        assert X.shape[1] == self.weights.shape[0] * 6
         return self
 
     def predict(self, X):
-        return sum(X.iloc[:, i*6:i*6 + 6].values * w for i, w in enumerate(self.weights))
+        return sum(X.iloc[:, i*6:i*6 + 6].values * np.asarray([w]) for i, w in enumerate(self.weights))
 
 
 class OnExtendedData:
@@ -97,13 +97,21 @@ class Pipeline:
 
             eval_X = step.transform(eval_X)
 
-        return self.steps[-1].fit_eval(train_X, train_y, eval_X, eval_y)
+        if hasattr(self.steps[-1], 'fit_eval'):
+            return self.steps[-1].fit_eval(train_X, train_y, eval_X, eval_y)
+        else:
+            return self.steps[-1].fit(train_X, train_y)
 
     def predict(self, X):
         for step in self.steps[:-1]:
             X = step.transform(X)
 
         return self.steps[-1].predict(X)
+
+    def build_features(self, X):
+        for step in self.steps[:-1]:
+            X = step.transform(X)
+        return X
 
 
 class Bagged:

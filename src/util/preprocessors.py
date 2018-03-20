@@ -69,3 +69,20 @@ class AvgGroupsColumns(BaseEstimator):
                 res["%s__%s" % (group_name, col)] = X[["%s__%s" % (g, col) for g in group_content]].mean(axis=1)
 
         return res
+
+
+class Union:
+
+    def __init__(self, *estimators):
+        self.estimators = estimators
+
+    def fit(self, X, y=None):
+        for e in self.estimators:
+            e.fit(X)
+        return self
+
+    def fit_transform(self, X, y=None):
+        return pd.concat([e.fit_transform(X) for e in self.estimators], axis=1)
+
+    def transform(self, X):
+        return pd.concat([e.transform(X) for e in self.estimators], axis=1)

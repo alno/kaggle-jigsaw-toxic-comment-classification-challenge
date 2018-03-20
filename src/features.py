@@ -1,6 +1,10 @@
 import re
+import os
+import time
 import string
+import threading
 import unicodedata
+import unidecode
 
 import pandas as pd
 import numpy as np
@@ -16,7 +20,6 @@ from joblib import Parallel, delayed
 def count_regexp_occ(regexp, text):
     """ Simple way to get the number of occurence of a regex"""
     return len(re.findall(regexp, text))
-
 
 
 def clean1(raw):
@@ -566,3 +569,139 @@ def api1(raw):
     data.drop(['text'], axis=1, inplace=True)
 
     return pd.DataFrame(data.values, columns=data.columns, index=raw.index)
+
+
+def api2_raw(raw):
+    from googleapiclient import discovery
+
+    tls = threading.local()
+    eos_pattern = re.compile(r"[!?.]\s+")
+    eow_pattern = re.compile(r"\s+")
+
+    def aggregate_api_responses(responses):
+        if any(r is None for r in responses):
+            return None
+
+        keys = ['UNSUBSTANTIAL', 'LIKELY_TO_REJECT', 'OBSCENE', 'SEVERE_TOXICITY', 'TOXICITY', 'INFLAMMATORY', 'SPAM', 'ATTACK_ON_AUTHOR', 'INCOHERENT', 'ATTACK_ON_COMMENTER']
+        res = {}
+
+        for k in keys:
+            vals = [r[k] for r in responses]
+            res[k] = {
+                'spanScores': sum([v['spanScores'] for v in vals], []),
+                'summaryScore': {'type': 'PROBABILITY', 'value': (sum(v['summaryScore']['value'] for v in vals) / len(vals))},
+                'parts': vals
+            }
+
+        return res
+
+    def split_text(text, min_len, max_len):
+        parts = []
+
+        pos = 0
+        while len(text) - pos > max_len:
+            split_match = eos_pattern.search(text, pos + min_len, pos + max_len)
+            if split_match is None:
+                split_match = eow_pattern.search(text, pos + min_len, pos + max_len)
+            if split_match is None:
+                split_pos = pos + min_len
+            else:
+                split_pos = split_match.end()
+            parts.append(text[pos:split_pos])
+            pos = split_pos
+
+        parts.append(text[pos:])
+        return parts
+
+    def get_api_response(text):
+        if len(text) > 2900:
+            return aggregate_api_responses([get_api_response(p) for p in split_text(text, 2000, 2900)])
+
+        analyze_request = {
+            'comment': {'text': text},
+            'requestedAttributes': {
+                'TOXICITY': {},
+                'SEVERE_TOXICITY': {},
+                'ATTACK_ON_AUTHOR': {},
+                'ATTACK_ON_COMMENTER': {},
+                'INCOHERENT': {},
+                'INFLAMMATORY': {},
+                'LIKELY_TO_REJECT': {},
+                'OBSCENE': {},
+                'SPAM': {},
+                'UNSUBSTANTIAL': {}
+            }
+        }
+
+        try:
+            if not hasattr(tls, 'service'):
+                tls.service = discovery.build('commentanalyzer', 'v1alpha1', developerKey=os.getenv('API_KEY'))
+
+            time.sleep(1.0)
+            response = tls.service.comments().analyze(body=analyze_request).execute()
+            return response['attributeScores']
+        except Exception as e:
+            print(e)
+            return None
+
+    with Parallel(10, backend="threading", verbose=5) as parallel:
+        if os.path.exists('tmp/state.pickle'):
+            df = pd.read_pickle('tmp/state.pickle')
+        else:
+            df = pd.DataFrame(index=raw.index)
+            df['api_response'] = None
+
+        index = df[df['api_response'].isnull()].index
+
+        batch_size = 5000
+        for ofs in range(0, len(index), batch_size):
+            idx = index[ofs:ofs+batch_size]
+            df.loc[idx, 'api_response'] = parallel(delayed(get_api_response, check_pickle=False)(comment) for comment in raw.loc[idx, 'comment_text'])
+            df.to_pickle('tmp/state.pickle')
+            print("Saved state on step %d" % ofs)
+
+    return df
+
+
+def api3(raw):
+    def extract_features(resp):
+        if isinstance(resp, str):
+            return {}
+
+        res = {}
+        for k in resp.keys():
+            res['%s_summary' % k] = resp[k]['summaryScore']['value']
+            res['%s_min' % k] = min(span['score']['value'] for span in resp[k]['spanScores'])
+            res['%s_max' % k] = min(span['score']['value'] for span in resp[k]['spanScores'])
+
+        return res
+
+    records = []
+    for filename in ['input/new_train_api.pickle', 'input/new_test_api.pickle']:
+        for line in pd.read_pickle(filename):
+            records.append(extract_features(line[1]))
+
+    return pd.DataFrame.from_records(records, index=raw.index)
+
+
+def api3_2(raw):
+    def extract_features(resp):
+        if isinstance(resp, str):
+            return {}
+
+        res = {}
+        for k in resp.keys():
+            res['%s_summary' % k] = resp[k]['summaryScore']['value']
+            res['%s_min' % k] = min(span['score']['value'] for span in resp[k]['spanScores'])
+            res['%s_max' % k] = min(span['score']['value'] for span in resp[k]['spanScores'])
+            res['%s_mean' % k] = np.mean([span['score']['value'] for span in resp[k]['spanScores']])
+            res['%s_std' % k] = np.std([span['score']['value'] for span in resp[k]['spanScores']])
+
+        return res
+
+    records = []
+    for filename in ['input/new_train_api.pickle', 'input/new_test_api.pickle']:
+        for line in pd.read_pickle(filename):
+            records.append(extract_features(line[1]))
+
+    return pd.DataFrame.from_records(records, index=raw.index)

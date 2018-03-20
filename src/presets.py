@@ -1,6 +1,6 @@
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.pipeline import make_pipeline, make_union
@@ -9,7 +9,7 @@ from sklearn.metrics import roc_auc_score
 from scipy.special import expit
 
 from src.util.estimators import MultiProba, SimpleAverage, WeightedAverage, OnExtendedData, Pipeline, Bagged
-from src.util.preprocessors import OnColumn, DropColumns, SelectColumns, AvgGroupsColumns
+from src.util.preprocessors import OnColumn, DropColumns, SelectColumns, AvgGroupsColumns, Union
 from src.meta import input_file
 from src import augmentations, meta
 
@@ -23,8 +23,12 @@ import lightgbm as lgb
 from kgutil.models.keras import KerasRNN
 
 from hyperopt import hp
+import numpy as np
 
 from keras.optimizers import Adam, SGD
+
+
+api_columns = ['UNSUBSTANTIAL', 'OBSCENE', 'LIKELY_TO_REJECT', 'SEVERE_TOXICITY', 'TOXICITY', 'INFLAMMATORY', 'ATTACK_ON_AUTHOR', 'SPAM', 'INCOHERENT', 'ATTACK_ON_COMMENTER']
 
 
 def param_search_space(**space):
@@ -1458,6 +1462,26 @@ def dpcnn_fasttext_aug7_pre():
     )
 
 
+@features('multilang_clean4_bpe50k', 'num1', 'num2', 'ind1', 'sentiment1')
+def bigru_cnn_9_bpe50k_aug6():
+    return keras_models.AugmentedModel(
+        train_schedule=[dict(num_epochs=3, batch_size=128), dict(num_epochs=4, batch_size=256), dict(num_epochs=4, batch_size=512), dict(num_epochs=4, batch_size=1024), dict(num_epochs=10, batch_size=2048)],
+        predict_batch_size=1024, external_metrics=dict(roc_auc=roc_auc_score),
+        text_truncating='post', text_padding='post', ignore_columns=['comment_text__de', 'comment_text__fr', 'comment_text__es'],
+        num_text_words=50000, max_text_len=300,
+        early_stopping_opts=dict(patience=5),
+        compile_opts=None,
+        model_fn=keras_models.bigru_cnn_1,
+        model_opts=dict(
+            lr=1e-3,
+            rnn_size=96, rnn_dropout=0.3, out_dropout=0.2, rnn_layers=2, conv_activation='elu',
+            mlp_layers=[64], mlp_dropout=0.2, mlp_activation='elu',
+            text_emb_size=300, text_emb_file=input_file('en.wiki.bpe.op50000.d300.w2v.txt'), text_emb_dropout=0.4, text_emb_rand_std=0.3
+        ),
+        train_augmentations=[augmentations.RandomTranslation(0.3), augmentations.RandomConcat(0.1)],
+    )
+
+
 # L2
 
 
@@ -2300,9 +2324,469 @@ def l2_group_lgb24_tst2():
         ), verbose_eval=50))
 
 
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre',
+)
+@features('num1', 'num2', 'ind1', 'sentiment1', 'api2_raw')
+def l2_group_lgb24_tst3():
+    return Pipeline(
+        make_union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre']),
+            ]),
+            SelectColumns([
+                'cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos',
+                'UNSUBSTANTIAL', 'OBSCENE', 'LIKELY_TO_REJECT', 'SEVERE_TOXICITY', 'TOXICITY', 'INFLAMMATORY', 'ATTACK_ON_AUTHOR', 'SPAM', 'INCOHERENT', 'ATTACK_ON_COMMENTER',
+            ])
+        ),
+        boost_models.LgbModel(params=dict(
+            max_depth=3, metric="auc",
+            num_leaves=7, boosting_type="gbdt",
+            learning_rate=0.02, feature_fraction=0.45, colsample_bytree=0.45,
+            bagging_fraction=0.9, bagging_freq=5,
+            reg_lambda=0.3,
+        ), rounds=dict(
+            toxic=1000,
+            severe_toxic=800,
+            obscene=800,
+            threat=800,
+            insult=1000,
+            identity_hate=1000
+        ), verbose_eval=50))
+
+
 @submodels('l2_avg24', 'l2_group_lgb24_tst2')
 def l3_avg6_api():
     return make_pipeline(
         DropColumns(['comment_text']),
         SimpleAverage(),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre',
+)
+@features('num1', 'num2', 'ind1', 'sentiment1', 'api1')
+def l2_group_lgb24_api_b20():
+    return Pipeline(
+        make_union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre']),
+            ]),
+            SelectColumns([
+                'cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos',
+                'UNSUBSTANTIAL', 'OBSCENE', 'LIKELY_TO_REJECT', 'SEVERE_TOXICITY', 'TOXICITY', 'INFLAMMATORY', 'ATTACK_ON_AUTHOR', 'SPAM', 'INCOHERENT', 'ATTACK_ON_COMMENTER',
+            ])
+        ),
+        Bagged(20, boost_models.LgbModel(params=dict(
+            max_depth=3, metric="auc",
+            num_leaves=7, boosting_type="gbdt",
+            learning_rate=0.02, feature_fraction=0.45, colsample_bytree=0.45,
+            bagging_fraction=0.9, bagging_freq=5,
+            reg_lambda=0.3,
+        ), rounds=dict(
+            toxic=1000,
+            severe_toxic=800,
+            obscene=800,
+            threat=800,
+            insult=1000,
+            identity_hate=1000
+        ), verbose_eval=50)))
+
+
+@submodels('l2_avg24', 'l2_group_lgb24_api_b20')
+def l3_avg7_api():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        WeightedAverage([
+            [0.01, 0.1, 0.1, 0.1, 0.1, 0.1],
+            [0.99, 0.9, 0.9, 0.9, 0.9, 0.9]
+        ]),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6', 'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre'
+)
+def l2_avg25():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        SimpleAverage(),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre'
+)
+@features('num1', 'num2', 'ind1', 'sentiment1')
+def l2_group_lgb25_feats():
+    return Pipeline(
+        make_union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre']),
+            ]),
+            SelectColumns(['cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos'])
+        ),
+        boost_models.LgbModel(params=dict(
+            max_depth=3, metric="auc",
+            num_leaves=7, boosting_type="gbdt",
+            learning_rate=0.02, feature_fraction=0.45, colsample_bytree=0.45,
+            bagging_fraction=0.9, bagging_freq=5,
+            reg_lambda=0.3,
+        ), rounds=dict(
+            toxic=1000,
+            severe_toxic=800,
+            obscene=800,
+            threat=800,
+            insult=1000,
+            identity_hate=1000
+        ), verbose_eval=50))
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre'
+)
+@features('num1', 'num2', 'ind1', 'sentiment1')
+def l2_group_lgb25_feats_b5():
+    return Pipeline(
+        make_union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre']),
+            ]),
+            SelectColumns(['cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos'])
+        ),
+        Bagged(5, boost_models.LgbModel(params=dict(
+            max_depth=3, metric="auc",
+            num_leaves=7, boosting_type="gbdt",
+            learning_rate=0.02, feature_fraction=0.45, colsample_bytree=0.45,
+            bagging_fraction=0.9, bagging_freq=5,
+            reg_lambda=0.3,
+        ), rounds=dict(
+            toxic=1000,
+            severe_toxic=800,
+            obscene=800,
+            threat=800,
+            insult=1000,
+            identity_hate=1000
+        ), verbose_eval=50)))
+
+
+@submodels('l2_avg23', 'l2_avg24', 'l2_group_lgb23_b10', 'l2_group_lgb25_feats', 'l2_group_lgb25_feats_b5')
+def l3_avg8():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        WeightedAverage([0.2, 0.2, 0.2, 0.2, 0.2]),
+    )
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre'
+)
+@features('num1', 'num2', 'ind1', 'sentiment1', 'api3')
+def l2_group_lgb25_api3():
+    return Pipeline(
+        Union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre']),
+            ]),
+            SelectColumns(
+                ['cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos'] +
+                sum([['%s_summary' % c, '%s_min' % c, '%s_max' % c] for c in api_columns], [])
+            )
+        ),
+        boost_models.LgbModel(params=dict(
+            max_depth=3, metric="auc",
+            num_leaves=7, boosting_type="gbdt",
+            learning_rate=0.02, feature_fraction=0.45, colsample_bytree=0.45,
+            bagging_fraction=0.9, bagging_freq=5,
+            reg_lambda=0.3,
+        ), rounds=dict(
+            toxic=1000,
+            severe_toxic=800,
+            obscene=800,
+            threat=800,
+            insult=1000,
+            identity_hate=1000
+        ), verbose_eval=50))
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre'
+)
+@features('num1', 'num2', 'ind1', 'sentiment1', 'api3')
+def l2_group_lgb25_api3_2():
+    return Pipeline(
+        Union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre']),
+            ]),
+            SelectColumns(
+                ['cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos'] +
+                sum([['%s_summary' % c] for c in api_columns], [])
+            )
+        ),
+        boost_models.LgbModel(params=dict(
+            max_depth=4, metric="auc",
+            num_leaves=7, boosting_type="gbdt",
+            learning_rate=0.015, feature_fraction=0.45, colsample_bytree=0.45,
+            bagging_fraction=0.9, bagging_freq=5,
+            reg_lambda=0.3,
+        ), rounds=dict(
+            toxic=1000,
+            severe_toxic=800,
+            obscene=800,
+            threat=800,
+            insult=1000,
+            identity_hate=1000
+        ), verbose_eval=50))
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre'
+)
+@features('num1', 'num2', 'ind1', 'sentiment1', 'api3')
+def l2_group_rgf25_api3():
+    from rgf.sklearn import RGFClassifier
+
+    return make_pipeline(
+        make_union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre']),
+            ]),
+            SelectColumns(
+                ['cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos'] +
+                sum([['%s_summary' % c, '%s_min' % c, '%s_max' % c] for c in api_columns], [])
+            )
+        ),
+        FunctionTransformer(np.nan_to_num, validate=False),
+        MultiProba(RGFClassifier(max_leaf=400, algorithm="RGF_Sib", test_interval=100, verbose=True)))
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre'
+)
+@features('num1', 'num2', 'ind1', 'sentiment1', 'api3_2')
+def l2_group_lgb25_api3_3():
+    return Pipeline(
+        Union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre']),
+            ]),
+            SelectColumns(
+                ['cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos'] +
+                sum([['%s_summary' % c, '%s_min' % c, '%s_max' % c, '%s_mean' % c, '%s_std' % c] for c in api_columns], [])
+            )
+        ),
+        boost_models.LgbModel(params=dict(
+            max_depth=3, metric="auc",
+            num_leaves=7, boosting_type="gbdt",
+            learning_rate=0.02, feature_fraction=0.45, colsample_bytree=0.45,
+            bagging_fraction=0.9, bagging_freq=5,
+            reg_lambda=0.3,
+        ), rounds=dict(
+            toxic=1000,
+            severe_toxic=800,
+            obscene=800,
+            threat=800,
+            insult=1000,
+            identity_hate=1000
+        ), verbose_eval=50))
+
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre'
+)
+@features('num1', 'num2', 'ind1', 'sentiment1', 'api3_2')
+def l2_group_xgb25_api3_3():
+    return Pipeline(
+        Union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre']),
+            ]),
+            SelectColumns(
+                ['cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos'] +
+                sum([['%s_summary' % c, '%s_min' % c, '%s_max' % c, '%s_mean' % c, '%s_std' % c] for c in api_columns], [])
+            )
+        ),
+        boost_models.XgbModel(params=dict(
+            min_child_weight=8,
+        ), rounds=dict(
+            toxic=1000,
+            severe_toxic=800,
+            obscene=800,
+            threat=800,
+            insult=1000,
+            identity_hate=1000
+        ), verbose_eval=50))
+
+@submodels(
+    'lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams',
+    'lgb1', 'lgb2', 'lgb3',
+    'bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6',
+    'rnn_pretrained_3', 'bigru_cnn_6_aug6', 'bigru_cnn_4_aug6', 'bigru_sterby_2', 'bigru_cnn_5_aug4', 'bigru_rcnn_1', 'cudnn_lstm_2', 'bigru_cnn_4_aug3', 'bigru_rcnn_3', 'bigru_gmp_1', 'bigru_rcnn_4', 'bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug4', 'bigru_sterby_3_num_aug2', 'rnn_pretrained_4', 'bigru_cnn_4_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_4_aug2', 'bigru_cnn_3', 'bigru_sterby_2_num', 'bigru_sterby_5',
+    'bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_aug6', 'bigru_cnn_7_atanas_aug6',
+    'bigru_cnn_8_bpe50k_aug6', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_bpe50k_aug6', 'bigru_sterby_2_aug6',
+    'bigru_dpcnn_aug7_pre', 'dpcnn_bpe50k_aug7_pre', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre'
+)
+@features('num1', 'num2', 'ind1', 'sentiment1', 'api3_2')
+def l2_group_et25_api3_3():
+    return Pipeline(
+        Union(
+            AvgGroupsColumns(columns=meta.target_columns, groups=[
+                ('lr', ['lr2', 'lr3', 'lr3_cl2', 'lr3_more_ngrams']),
+                ('lgb', ['lgb1', 'lgb2', 'lgb3']),
+                ('bpe', ['bigru_sterby_4_bpe50k', 'bigru_cnn_6_bpe50k_aug6', 'bigru_cnn_7_bpe50k_aug6', 'bigru_cnn_8_bpe50k_aug6', 'dpcnn_bpe50k_aug7_pre']),
+                ('g0', ['cudnn_lstm_2', 'rnn_pretrained_3', 'rnn_pretrained_4']),
+                ('g1', ['bigru_gmp_1', 'bigru_sterby_2', 'bigru_sterby_2_num', 'bigru_sterby_2_num_aug', 'bigru_sterby_3_num_aug2', 'bigru_sterby_3_num_aug4']),
+                ('g2', ['bigru_rcnn_1', 'bigru_rcnn_3', 'bigru_rcnn_4', 'bigru_cnn_3', 'bigru_sterby_5', 'bigru_cnn_9_aug6_twitter', 'bigru_cnn_9_aug6_twitter2', 'bigru_dpcnn_aug6', 'bigru_dpcnn_aug7_pre']),
+                ('g3', ['bigru_cnn_4_aug2', 'bigru_cnn_4_aug3', 'bigru_cnn_4_aug4', 'bigru_cnn_4_aug6', 'bigru_cnn_5_aug4', 'bigru_cnn_5_aug6', 'bigru_cnn_6_aug6', 'bigru_cnn_7_aug6']),
+                ('g4', ['bigru_cnn_4', 'bigru_sterby_2_num_sent_longer_rand', 'bigru_sterby_2_aug6']),
+                ('atanas', ['bigru_cnn_6_atanas_aug6', 'bigru_cnn_7_atanas_aug6', 'dpcnn_twitter_aug7_pre', 'dpcnn_fasttext_aug7_pre']),
+            ]),
+            SelectColumns(
+                ['cap_ratio', 'exq_ratio', 'mean_sent_len', 'mean_sent_len_words', 'mean_word_len', 'num_sents', 'num_words', 'uniq_word_ratio', 'ant_slash_n', 'raw_word_len', 'raw_char_len', 'nb_upper', 'nb_fk', 'nb_sk', 'nb_dk', 'nb_you', 'nb_mother', 'nb_ng', 'start_with_columns', 'has_timestamp', 'has_date_long', 'has_date_short', 'has_http', 'has_mail', 'has_emphasize_equal', 'has_emphasize_quotes', 'compound', 'neg', 'neu', 'pos'] +
+                sum([['%s_summary' % c, '%s_min' % c, '%s_max' % c, '%s_mean' % c, '%s_std' % c] for c in api_columns], [])
+            )
+        ),
+        FunctionTransformer(lambda x: x.fillna(-1), validate=False),
+        MultiProba(ExtraTreesClassifier(500, max_depth=8, n_jobs=-1)))
+
+
+@submodels('l2_group_lgb24_tst2', 'l2_group_lgb25_api3_2', 'l2_group_lgb25_api3', 'l2_group_lgb25_api3_3')
+def l3_avg9_api():
+    return make_pipeline(
+        DropColumns(['comment_text']),
+        WeightedAverage([0.2, 0.1, 0.3, 0.4]),
     )
