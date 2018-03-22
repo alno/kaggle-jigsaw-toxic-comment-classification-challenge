@@ -31,6 +31,7 @@ joblib
 git+git://github.com/hyperopt/hyperopt.git#egg=hyperopt
 google-api-python-client
 unidecode
+kaggle
 
 # kgutil
 -e git+ssh://git@bitbucket.org/alexey-noskov/kgutil.git#egg=kgutil

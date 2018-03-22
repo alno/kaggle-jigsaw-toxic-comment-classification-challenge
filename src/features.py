@@ -663,6 +663,29 @@ def api2_raw(raw):
     return df
 
 
+def api2(api2_raw):
+    def extract_features(resp):
+        if resp is None:
+            return {}
+
+        res = {}
+        for k in resp.keys():
+            res['%s_summary' % k] = resp[k]['summaryScore']['value']
+            res['%s_min' % k] = min(span['score']['value'] for span in resp[k]['spanScores'])
+            res['%s_max' % k] = min(span['score']['value'] for span in resp[k]['spanScores'])
+            res['%s_mean' % k] = np.mean([span['score']['value'] for span in resp[k]['spanScores']])
+            res['%s_std' % k] = np.std([span['score']['value'] for span in resp[k]['spanScores']])
+
+        return res
+
+    records = []
+    for resp in api2_raw['api_response']:
+        records.append(extract_features(resp))
+
+    return pd.DataFrame.from_records(records, index=api2_raw.index)
+
+
+
 def api3(raw):
     def extract_features(resp):
         if isinstance(resp, str):
